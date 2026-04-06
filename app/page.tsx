@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { VALID_WORDS } from "./words"
-import { getTodayPuzzle, DAILY_PUZZLES, type BonusType } from "./puzzles"
-import { solvePuzzle } from "./solver"
-import { LETTER_SCORES } from "./scoring"
+import { VALID_WORDS } from "@/lib/words"
+import { getTodayPuzzle, DAILY_PUZZLES, type BonusType } from "@/lib/puzzles"
+import { solvePuzzle } from "@/lib/solver"
+import { LETTER_SCORES } from "@/lib/scoring"
 
 type TileSelection = {
   letter: string
