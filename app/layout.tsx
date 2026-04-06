@@ -9,7 +9,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Unknown Word Game",
-  description: "A daily word puzzle game",
+  description: "A daily word puzzle game - now with CI/CD!",
 };
 
 export default function RootLayout({
