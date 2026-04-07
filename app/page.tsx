@@ -969,7 +969,7 @@ export default function Home() {
       const row = parseInt(cellEl.dataset.row!)
       const col = parseInt(cellEl.dataset.col!)
       if (drag.type === "rack") {
-        setDraggedTile({ letter: drag.letter, index: drag.index })
+        setDraggedTile({ letter: drag.letter, index: drag.index, isBlank: drag.isBlank })
         setDraggedPlacedTile(null)
         placeTileOnBoard({ letter: drag.letter, index: drag.index, isBlank: drag.isBlank }, row, col)
       } else {
