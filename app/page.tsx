@@ -1870,8 +1870,8 @@ export default function Home() {
         <div
           style={{
             position: "fixed",
-            left: touchDrag.x + 12,
-            top: touchDrag.y - 72,
+            left: touchDrag.x - 18,
+            top: touchDrag.y - 40,
             width: "56px",
             height: "56px",
             backgroundColor: "#e7d3a8",
