@@ -111,6 +111,7 @@ export default function Home() {
   const touchDragRef = useRef<TouchDragState>(null)
   const draggedTileRef = useRef<TileSelection>(null)
   const draggedPlacedTileRef = useRef<DraggedPlacedTile>(null)
+  const completeTouchDragRef = useRef<((touch: { clientX: number; clientY: number }) => void) | null>(null)
 
   const puzzle = useMemo(
     () => DAILY_PUZZLES.find((p) => p.date === selectedDate) || getTodayPuzzle(),
@@ -928,10 +929,9 @@ export default function Home() {
     setDraggedTile(null)
   }
 
-  function handleTouchEnd(e: React.TouchEvent) {
+  function completeTouchDrag(touch: { clientX: number; clientY: number }) {
     const drag = touchDragRef.current
     if (!drag) return
-    const touch = e.changedTouches[0]
     const start = touchStartPosRef.current
     const moved = start ? Math.hypot(touch.clientX - start.x, touch.clientY - start.y) : 999
 
@@ -986,6 +986,33 @@ export default function Home() {
       setDraggedPlacedTile(null)
     }
   }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    const touch = e.changedTouches[0]
+    if (!touch) return
+    completeTouchDrag(touch)
+  }
+
+  useEffect(() => {
+    completeTouchDragRef.current = completeTouchDrag
+  }, [completeTouchDrag])
+
+  useEffect(() => {
+    function onTouchEnd(e: TouchEvent) {
+      if (!touchDragRef.current) return
+      const touch = e.changedTouches[0]
+      if (!touch) return
+      completeTouchDragRef.current?.(touch)
+    }
+
+    document.addEventListener("touchend", onTouchEnd)
+    document.addEventListener("touchcancel", onTouchEnd)
+
+    return () => {
+      document.removeEventListener("touchend", onTouchEnd)
+      document.removeEventListener("touchcancel", onTouchEnd)
+    }
+  }, [])
 
   const gameOver = attemptsLeft === 0
   const canShare = attemptHistory.length > 0
