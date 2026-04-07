@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { VALID_WORDS } from "@/lib/words"
-import { getTodayPuzzle, DAILY_PUZZLES, type BonusType } from "@/lib/puzzles"
-import { solvePuzzle } from "@/lib/solver"
-import { LETTER_SCORES } from "@/lib/scoring"
+import { startTransition, useEffect, useMemo, useRef, useState } from "react"
+import { VALID_WORDS } from "./words"
+import { getTodayPuzzle, DAILY_PUZZLES, type BonusType } from "./puzzles"
+import { solvePuzzle } from "./solver"
+import { LETTER_SCORES } from "./scoring"
 
 type TileSelection = {
   letter: string
@@ -92,8 +92,12 @@ function moveItemToIndex<T>(items: T[], fromIndex: number, toIndex: number) {
   return copy
 }
 
+function getLocalDateString() {
+  return new Intl.DateTimeFormat("en-CA").format(new Date())
+}
+
 export default function Home() {
-  const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const todayDate = useMemo(() => getLocalDateString(), [])
   const [selectedDate, setSelectedDate] = useState(todayDate)
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
@@ -141,31 +145,43 @@ export default function Home() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as Partial<SavedGameState>
-        if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
-        if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
-        if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
-        if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
-        if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
-        if (parsed.message) setMessage(parsed.message)
-        if (parsed.hintUsed) setHintUsed(parsed.hintUsed)
+        startTransition(() => {
+          if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
+          if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
+          if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
+          if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
+          if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
+          if (parsed.message) setMessage(parsed.message)
+          if (parsed.hintUsed) setHintUsed(parsed.hintUsed)
+          setHasLoadedSave(true)
+        })
         if (parsed.attemptsLeft === 0) statsUpdatedRef.current = true
       } catch {
         // ignore bad saved data
       }
+    } else {
+      startTransition(() => {
+        setHasLoadedSave(true)
+      })
     }
 
     try {
       const savedStats = localStorage.getItem(STATS_KEY)
-      if (savedStats) setStats(JSON.parse(savedStats))
+      if (savedStats) {
+        const parsedStats = JSON.parse(savedStats) as GameStats
+        startTransition(() => {
+          setStats(parsedStats)
+        })
+      }
     } catch {
       // ignore
     }
 
     if (!localStorage.getItem("daily-word-game-tutorial-seen")) {
-      setShowTutorial(true)
+      startTransition(() => {
+        setShowTutorial(true)
+      })
     }
-
-    setHasLoadedSave(true)
   }, [storageKey])
 
   useEffect(() => {
@@ -315,6 +331,22 @@ export default function Home() {
     return false
   }
 
+  function isPlacementAllowedWithTiles(
+    tiles: PlacedTile[],
+    row: number,
+    col: number
+  ) {
+    if (tiles.length <= 1) return true
+
+    const allSameRow = tiles.every((tile) => tile.row === tiles[0].row)
+    const allSameCol = tiles.every((tile) => tile.col === tiles[0].col)
+
+    if (allSameRow) return row === tiles[0].row
+    if (allSameCol) return col === tiles[0].col
+
+    return false
+  }
+
   function placeTileOnBoard(tileData: TileSelection, row: number, col: number) {
     if (attemptsLeft === 0) {
       setMessage("No attempts left.")
@@ -342,6 +374,38 @@ export default function Home() {
     setDraggedTile(null)
     setRackDropIndex(null)
     setMessage("Good move. Keep placing tiles in one line.")
+  }
+
+  function movePlacedTileOnBoard(tile: DraggedPlacedTile, row: number, col: number) {
+    if (!tile) return
+
+    if (tile.row === row && tile.col === col) {
+      setDraggedPlacedTile(null)
+      return
+    }
+
+    if (getCellLetter(row, col)) {
+      setMessage("That square is already occupied.")
+      return
+    }
+
+    const remainingTiles = placedTiles.filter(
+      (placed) => !(placed.row === tile.row && placed.col === tile.col)
+    )
+
+    if (!isPlacementAllowedWithTiles(remainingTiles, row, col)) {
+      setMessage("Your tiles must stay in one row or one column.")
+      return
+    }
+
+    setPlacedTiles([
+      ...remainingTiles,
+      { row, col, letter: tile.letter },
+    ])
+    setDraggedPlacedTile(null)
+    setSelectedTile(null)
+    setRackDropIndex(null)
+    setMessage(`Moved ${tile.letter}.`)
   }
 
   function handleCellClick(row: number, col: number) {
@@ -396,7 +460,7 @@ export default function Home() {
     }
 
     if (draggedPlacedTile) {
-      setMessage("Drag placed tiles to the return area under the rack.")
+      movePlacedTileOnBoard(draggedPlacedTile, row, col)
     }
   }
 
@@ -612,7 +676,9 @@ export default function Home() {
     }
 
     const totalScore = wordsFormed.reduce((sum, item) => sum + item.score, 0)
-    const newAttemptsLeft = attemptsLeft - 1
+    const solvedOptimallyOnFirstTry =
+      attemptHistory.length === 0 && totalScore >= solution.bestScore
+    const newAttemptsLeft = solvedOptimallyOnFirstTry ? 0 : attemptsLeft - 1
     const newBestScore = Math.max(bestScore, totalScore)
     const newAttempt = {
       words: wordsFormed,
@@ -624,7 +690,11 @@ export default function Home() {
     setAttemptsLeft(newAttemptsLeft)
     setBestScore(newBestScore)
     setAttemptHistory([...attemptHistory, newAttempt])
-    setMessage(`You scored ${totalScore}. Optimal score: ${solution.bestScore}.`)
+    setMessage(
+      solvedOptimallyOnFirstTry
+        ? `Perfect first try. You scored the optimal ${solution.bestScore}, so the game is over.`
+        : `You scored ${totalScore}. Optimal score: ${solution.bestScore}.`
+    )
 
     if (newAttemptsLeft === 0) {
       const rating =
@@ -752,6 +822,8 @@ export default function Home() {
     const touch = e.touches[0]
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     setTouchDrag({ type: "rack", letter: tile, index, x: touch.clientX, y: touch.clientY })
+    setDraggedTile({ letter: tile, index })
+    setDraggedPlacedTile(null)
     setSelectedTile(null)
   }
 
@@ -760,6 +832,8 @@ export default function Home() {
     const touch = e.touches[0]
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     setTouchDrag({ type: "placed", letter, row, col, x: touch.clientX, y: touch.clientY })
+    setDraggedPlacedTile({ row, col, letter })
+    setDraggedTile(null)
   }
 
   function handleTouchEnd(e: React.TouchEvent) {
@@ -771,6 +845,8 @@ export default function Home() {
 
     setTouchDrag(null)
     touchStartPosRef.current = null
+    setDraggedTile(null)
+    setDraggedPlacedTile(null)
 
     if (moved < 10) {
       if (drag.type === "rack") {
@@ -784,16 +860,22 @@ export default function Home() {
     const el = document.elementFromPoint(touch.clientX, touch.clientY)
     const cellEl = el?.closest("[data-row]") as HTMLElement | null
     const returnEl = el?.closest("[data-return-zone]")
+    const rackGapEl = el?.closest("[data-rack-gap]") as HTMLElement | null
+    const rackTileEl = el?.closest("[data-rack-tile]") as HTMLElement | null
 
     if (returnEl && drag.type === "placed") {
       returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter })
+    } else if (drag.type === "rack" && rackGapEl) {
+      handleRackGapDrop(parseInt(rackGapEl.dataset.rackGap!))
+    } else if (drag.type === "rack" && rackTileEl) {
+      handleRackGapDrop(parseInt(rackTileEl.dataset.rackTile!))
     } else if (cellEl) {
       const row = parseInt(cellEl.dataset.row!)
       const col = parseInt(cellEl.dataset.col!)
       if (drag.type === "rack") {
         placeTileOnBoard({ letter: drag.letter, index: drag.index }, row, col)
       } else {
-        returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter })
+        movePlacedTileOnBoard({ row: drag.row, col: drag.col, letter: drag.letter }, row, col)
       }
     } else if (drag.type === "placed") {
       returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter })
@@ -1310,6 +1392,52 @@ export default function Home() {
                 )
               })}
             </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                marginTop: "16px",
+                flexWrap: "wrap",
+                justifyContent: "center",
+              }}
+            >
+              <button
+                onClick={submitMove}
+                disabled={gameOver}
+                style={{
+                  padding: "12px 18px",
+                  fontSize: "16px",
+                  borderRadius: "8px",
+                  border: "2px solid #7b6241",
+                  backgroundColor: gameOver ? "#ddd6c8" : "#d7c3a0",
+                  cursor: gameOver ? "not-allowed" : "pointer",
+                  color: "#2f2419",
+                  fontWeight: "bold",
+                  minWidth: "150px",
+                }}
+              >
+                Submit Move
+              </button>
+
+              <button
+                onClick={shuffleRack}
+                disabled={gameOver}
+                style={{
+                  padding: "12px 18px",
+                  fontSize: "16px",
+                  borderRadius: "8px",
+                  border: "2px solid #7b6241",
+                  backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
+                  cursor: gameOver ? "not-allowed" : "pointer",
+                  color: "#2f2419",
+                  fontWeight: "bold",
+                  minWidth: "150px",
+                }}
+              >
+                Shuffle Tiles
+              </button>
+            </div>
           </div>
 
           <div style={{ minWidth: "min(360px, 100%)" }}>
@@ -1333,6 +1461,7 @@ export default function Home() {
                   }}
                 >
                   <div
+                    data-rack-gap={index}
                     onDragOver={(e) => {
                       e.preventDefault()
                       if (draggedTile) setRackDropIndex(index)
@@ -1355,6 +1484,7 @@ export default function Home() {
                   />
 
                   <div
+                    data-rack-tile={index}
                     draggable={!gameOver}
                     onDragStart={(e) => handleTileDragStart(e, tile, index)}
                     onDragEnd={handleRackTileDragEnd}
@@ -1401,6 +1531,7 @@ export default function Home() {
 
                   {index === rack.length - 1 && (
                     <div
+                      data-rack-gap={rack.length}
                       onDragOver={(e) => {
                         e.preventDefault()
                         if (draggedTile) setRackDropIndex(rack.length)
@@ -1506,23 +1637,6 @@ export default function Home() {
               </button>
 
               <button
-                onClick={submitMove}
-                disabled={gameOver}
-                style={{
-                  padding: "12px 18px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
-                  backgroundColor: gameOver ? "#ddd6c8" : "#d7c3a0",
-                  cursor: gameOver ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: "bold",
-                }}
-              >
-                Submit Move
-              </button>
-
-              <button
                 onClick={clearCurrentMove}
                 disabled={gameOver}
                 style={{
@@ -1537,23 +1651,6 @@ export default function Home() {
                 }}
               >
                 Clear Move
-              </button>
-
-              <button
-                onClick={shuffleRack}
-                disabled={gameOver}
-                style={{
-                  padding: "12px 18px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
-                  backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
-                  cursor: gameOver ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: "bold",
-                }}
-              >
-                Shuffle Tiles
               </button>
 
               <button
@@ -1652,7 +1749,7 @@ export default function Home() {
                 <strong>Score big</strong> with bonus squares: DL (double letter), TL (triple letter), DW (double word), TW (triple word). Bonuses apply only to newly placed tiles.
               </li>
               <li>
-                You have <strong>3 attempts</strong>. Your best score is compared to the optimal score.
+                You have <strong>3 attempts</strong>. Your best score is compared to the optimal score, but if you hit the optimal score on your first try, the puzzle ends immediately.
               </li>
               <li>
                 On <strong>mobile</strong>, drag tiles by touch or tap a tile then tap a board square.
@@ -1680,4 +1777,3 @@ export default function Home() {
     </main>
   )
 }
-
