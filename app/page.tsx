@@ -104,6 +104,7 @@ export default function Home() {
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
   const touchDragRef = useRef<TouchDragState>(null)
+  const touchDragOffsetRef = useRef<{ x: number; y: number }>({ x: 28, y: 28 })
 
   const puzzle = useMemo(
     () => DAILY_PUZZLES.find((p) => p.date === selectedDate) || getTodayPuzzle(),
@@ -827,20 +828,35 @@ export default function Home() {
     setHasLoadedSave(false)
   }
 
-  function handleRackTouchStart(e: React.TouchEvent, tile: string, index: number) {
+  function handleRackTouchStart(e: React.TouchEvent<HTMLDivElement>, tile: string, index: number) {
     if (gameOver) return
     const touch = e.touches[0]
+    const rect = e.currentTarget.getBoundingClientRect()
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    touchDragOffsetRef.current = {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    }
     setTouchDrag({ type: "rack", letter: tile, index, x: touch.clientX, y: touch.clientY })
     setDraggedTile({ letter: tile, index })
     setDraggedPlacedTile(null)
     setSelectedTile(null)
   }
 
-  function handlePlacedTouchStart(e: React.TouchEvent, row: number, col: number, letter: string) {
+  function handlePlacedTouchStart(
+    e: React.TouchEvent<HTMLDivElement>,
+    row: number,
+    col: number,
+    letter: string
+  ) {
     if (gameOver) return
     const touch = e.touches[0]
+    const rect = e.currentTarget.getBoundingClientRect()
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    touchDragOffsetRef.current = {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    }
     setTouchDrag({ type: "placed", letter, row, col, x: touch.clientX, y: touch.clientY })
     setDraggedPlacedTile({ row, col, letter })
     setDraggedTile(null)
@@ -1428,6 +1444,7 @@ export default function Home() {
                       boxSizing: "border-box",
                       transition: "transform 160ms ease, box-shadow 160ms ease",
                       boxShadow: hasLetter ? "0 3px 6px rgba(0,0,0,0.08)" : "none",
+                      touchAction: "none",
                       opacity:
                         draggedPlacedTile &&
                         draggedPlacedTile.row === row &&
@@ -1623,6 +1640,7 @@ export default function Home() {
                       color: "#2f2419",
                       opacity: draggedTile?.index === index ? 0.6 : 1,
                       transition: "transform 160ms ease, box-shadow 160ms ease",
+                      touchAction: "none",
                     }}
                   >
                     {tile}
@@ -1735,8 +1753,8 @@ export default function Home() {
         <div
           style={{
             position: "fixed",
-            left: touchDrag.x - 28,
-            top: touchDrag.y - 28,
+            left: touchDrag.x - touchDragOffsetRef.current.x,
+            top: touchDrag.y - touchDragOffsetRef.current.y,
             width: "56px",
             height: "56px",
             backgroundColor: "#e7d3a8",
