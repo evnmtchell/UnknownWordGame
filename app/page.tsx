@@ -104,6 +104,7 @@ export default function Home() {
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
   const touchDragRef = useRef<TouchDragState>(null)
+  const touchDragOffsetRef = useRef<{ x: number; y: number }>({ x: 28, y: 28 })
 
   const puzzle = useMemo(
     () => DAILY_PUZZLES.find((p) => p.date === selectedDate) || getTodayPuzzle(),
@@ -115,6 +116,11 @@ export default function Home() {
   const maxAttempts = 3
   const startingRack = puzzle.rack
   const storageKey = `daily-word-game-${puzzle.date}`
+  const boardGap = 4
+  const boardMaxWidth = `${boardSize * 54 + (boardSize - 1) * boardGap}px`
+  const boardTileFontSize = "clamp(18px, 5vw, 24px)"
+  const boardBonusFontSize = "clamp(8px, 2.4vw, 11px)"
+  const boardScoreFontSize = "clamp(8px, 2vw, 10px)"
 
   const [rack, setRack] = useState(startingRack)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
@@ -260,7 +266,6 @@ export default function Home() {
 
     if (gameOver && isOptimalCell(row, col)) return "#bde0fe"
     if (showHint && isOptimalCell(row, col)) return "#bbf7d0"
-
     const bonus = getBonusAt(row, col)
 
     if (bonus === "DL") return "#cfe8ff"
@@ -293,26 +298,29 @@ export default function Home() {
     setMessage("Rack shuffled.")
   }
 
-  function handleRackGapDrop(targetIndex: number) {
-    if (!draggedTile) return
-    if (draggedPlacedTile) return
-
+  function reorderRackTile(fromIndex: number, targetIndex: number) {
     let finalIndex = targetIndex
-    if (draggedTile.index < targetIndex) {
+    if (fromIndex < targetIndex) {
       finalIndex = targetIndex - 1
     }
 
-    if (finalIndex === draggedTile.index) {
+    if (finalIndex === fromIndex) {
       setDraggedTile(null)
       setRackDropIndex(null)
       return
     }
 
-    setRack((prev) => moveItemToIndex(prev, draggedTile.index, finalIndex))
+    setRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
     setDraggedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
     setMessage("Rack rearranged.")
+  }
+
+  function handleRackGapDrop(targetIndex: number) {
+    if (!draggedTile) return
+    if (draggedPlacedTile) return
+    reorderRackTile(draggedTile.index, targetIndex)
   }
 
   function isPlacementAllowed(row: number, col: number) {
