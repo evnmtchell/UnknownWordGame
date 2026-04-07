@@ -109,6 +109,8 @@ export default function Home() {
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
   const touchDragRef = useRef<TouchDragState>(null)
+  const draggedTileRef = useRef<TileSelection>(null)
+  const draggedPlacedTileRef = useRef<DraggedPlacedTile>(null)
 
   const puzzle = useMemo(
     () => DAILY_PUZZLES.find((p) => p.date === selectedDate) || getTodayPuzzle(),
@@ -200,6 +202,14 @@ export default function Home() {
   useEffect(() => {
     touchDragRef.current = touchDrag
   }, [touchDrag])
+
+  useEffect(() => {
+    draggedTileRef.current = draggedTile
+  }, [draggedTile])
+
+  useEffect(() => {
+    draggedPlacedTileRef.current = draggedPlacedTile
+  }, [draggedPlacedTile])
 
   useEffect(() => {
     function onTouchMove(e: TouchEvent) {
@@ -336,6 +346,7 @@ export default function Home() {
     }
 
     setRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
+    draggedTileRef.current = null
     setDraggedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
@@ -343,9 +354,10 @@ export default function Home() {
   }
 
   function handleRackGapDrop(targetIndex: number) {
-    if (!draggedTile) return
-    if (draggedPlacedTile) return
-    reorderRackTile(draggedTile.index, targetIndex)
+    const activeDraggedTile = draggedTileRef.current
+    if (!activeDraggedTile) return
+    if (draggedPlacedTileRef.current) return
+    reorderRackTile(activeDraggedTile.index, targetIndex)
   }
 
   function isPlacementAllowed(row: number, col: number) {
@@ -409,6 +421,7 @@ export default function Home() {
       { row, col, letter: resolvedLetter, isBlank: tileData.isBlank },
     ])
     setRack((prev) => prev.filter((_, i) => i !== tileData.index))
+    draggedTileRef.current = null
     setSelectedTile(null)
     setDraggedTile(null)
     setRackDropIndex(null)
@@ -445,6 +458,7 @@ export default function Home() {
       ...remainingTiles,
       { row, col, letter: tile.letter, isBlank: tile.isBlank },
     ])
+    draggedPlacedTileRef.current = null
     setDraggedPlacedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
@@ -468,11 +482,14 @@ export default function Home() {
     e.dataTransfer.setData("text/plain", `${tile}-${index}`)
     e.dataTransfer.effectAllowed = "move"
     setDraggedTile({ letter: tile, index, isBlank: tile === BLANK_TILE })
+    draggedPlacedTileRef.current = null
+    draggedTileRef.current = { letter: tile, index, isBlank: tile === BLANK_TILE }
     setDraggedPlacedTile(null)
     setSelectedTile(null)
   }
 
   function handleRackTileDragEnd() {
+    draggedTileRef.current = null
     setDraggedTile(null)
     setRackDropIndex(null)
   }
@@ -488,23 +505,29 @@ export default function Home() {
     e.dataTransfer.setData("text/plain", `${letter}-${row}-${col}`)
     e.dataTransfer.effectAllowed = "move"
     setDraggedPlacedTile({ row, col, letter, isBlank })
+    draggedTileRef.current = null
+    draggedPlacedTileRef.current = { row, col, letter, isBlank }
     setDraggedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
   }
 
   function handlePlacedTileDragEnd() {
+    draggedPlacedTileRef.current = null
     setDraggedPlacedTile(null)
   }
 
   function handleCellDrop(row: number, col: number) {
-    if (draggedTile) {
-      placeTileOnBoard(draggedTile, row, col)
+    const activeDraggedTile = draggedTileRef.current
+    const activeDraggedPlacedTile = draggedPlacedTileRef.current
+
+    if (activeDraggedTile) {
+      placeTileOnBoard(activeDraggedTile, row, col)
       return
     }
 
-    if (draggedPlacedTile) {
-      movePlacedTileOnBoard(draggedPlacedTile, row, col)
+    if (activeDraggedPlacedTile) {
+      movePlacedTileOnBoard(activeDraggedPlacedTile, row, col)
     }
   }
 
@@ -514,6 +537,8 @@ export default function Home() {
     setPlacedTiles((prev) =>
       prev.filter((placed) => !(placed.row === tile.row && placed.col === tile.col))
     )
+    setRack((prev) => [...prev, tile.isBlank ? BLANK_TILE : tile.letter])
+    draggedPlacedTileRef.current = null
     setRack((prev) => [...prev, tile.isBlank ? BLANK_TILE : tile.letter])
     setDraggedPlacedTile(null)
     setSelectedTile(null)
