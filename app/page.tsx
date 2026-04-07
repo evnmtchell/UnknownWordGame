@@ -115,6 +115,13 @@ export default function Home() {
   const maxAttempts = 3
   const startingRack = puzzle.rack
   const storageKey = `daily-word-game-${puzzle.date}`
+  const boardGap = 4
+  const boardOuterPadding = 28
+  const boardViewportPadding = 56
+  const boardCellSize = `min(54px, calc((100vw - ${boardViewportPadding + boardOuterPadding + boardGap * (boardSize - 1)}px) / ${boardSize}))`
+  const boardTileFontSize = `clamp(18px, calc(${boardCellSize} * 0.44), 24px)`
+  const boardBonusFontSize = `clamp(8px, calc(${boardCellSize} * 0.2), 11px)`
+  const boardScoreFontSize = `clamp(8px, calc(${boardCellSize} * 0.18), 10px)`
 
   const [rack, setRack] = useState(startingRack)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
@@ -1293,13 +1300,18 @@ export default function Home() {
               padding: "14px",
               borderRadius: "12px",
               boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+              width: "100%",
+              maxWidth: "100%",
+              overflowX: "auto",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: `repeat(${boardSize}, 54px)`,
+                gridTemplateColumns: `repeat(${boardSize}, ${boardCellSize})`,
                 gap: "4px",
+                width: "fit-content",
+                margin: "0 auto",
               }}
             >
               {Array.from({ length: boardSize * boardSize }).map((_, index) => {
@@ -1344,8 +1356,8 @@ export default function Home() {
                     }
                     onTouchEnd={isMovablePlacedTile ? handleTouchEnd : undefined}
                     style={{
-                      width: "54px",
-                      height: "54px",
+                      width: boardCellSize,
+                      height: boardCellSize,
                       border:
                         draggedTile && !letter
                           ? "2px dashed #7b6241"
@@ -1353,7 +1365,7 @@ export default function Home() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: hasLetter ? "24px" : "11px",
+                      fontSize: hasLetter ? boardTileFontSize : boardBonusFontSize,
                       fontWeight: "bold",
                       backgroundColor: getCellBackground(row, col, Boolean(letter)),
                       cursor: isMovablePlacedTile
@@ -1380,7 +1392,7 @@ export default function Home() {
                           position: "absolute",
                           bottom: "4px",
                           right: "5px",
-                          fontSize: "10px",
+                          fontSize: boardScoreFontSize,
                           fontWeight: "bold",
                           color: "#4b3a28",
                         }}
@@ -1440,7 +1452,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ minWidth: "min(360px, 100%)" }}>
+          <div style={{ width: "100%", maxWidth: "360px" }}>
             <h2 style={{ marginTop: 0 }}>Your Tiles</h2>
 
             <div
