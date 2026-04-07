@@ -120,6 +120,11 @@ export default function Home() {
   const maxAttempts = 3
   const startingRack = puzzle.rack
   const storageKey = `daily-word-game-${puzzle.date}`
+  const boardGap = 4
+  const boardMaxWidth = `${boardSize * 54 + (boardSize - 1) * boardGap}px`
+  const boardTileFontSize = "clamp(18px, 5vw, 24px)"
+  const boardBonusFontSize = "clamp(8px, 2.4vw, 11px)"
+  const boardScoreFontSize = "clamp(8px, 2vw, 10px)"
 
   const [rack, setRack] = useState(startingRack)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
@@ -157,7 +162,10 @@ export default function Home() {
           if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
           if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
           if (parsed.message) setMessage(parsed.message)
-          if (parsed.hintUsed) setHintUsed(parsed.hintUsed)
+          if (parsed.hintUsed) {
+            setHintUsed(parsed.hintUsed)
+            setShowHint(true)
+          }
           setHasLoadedSave(true)
         })
         if (parsed.attemptsLeft === 0) statsUpdatedRef.current = true
@@ -267,7 +275,6 @@ export default function Home() {
 
     if (gameOver && isOptimalCell(row, col)) return "#bde0fe"
     if (showHint && isOptimalCell(row, col)) return "#bbf7d0"
-
     const bonus = getBonusAt(row, col)
 
     if (bonus === "DL") return "#cfe8ff"
@@ -316,26 +323,29 @@ export default function Home() {
     setMessage("Rack shuffled.")
   }
 
-  function handleRackGapDrop(targetIndex: number) {
-    if (!draggedTile) return
-    if (draggedPlacedTile) return
-
+  function reorderRackTile(fromIndex: number, targetIndex: number) {
     let finalIndex = targetIndex
-    if (draggedTile.index < targetIndex) {
+    if (fromIndex < targetIndex) {
       finalIndex = targetIndex - 1
     }
 
-    if (finalIndex === draggedTile.index) {
+    if (finalIndex === fromIndex) {
       setDraggedTile(null)
       setRackDropIndex(null)
       return
     }
 
-    setRack((prev) => moveItemToIndex(prev, draggedTile.index, finalIndex))
+    setRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
     setDraggedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
     setMessage("Rack rearranged.")
+  }
+
+  function handleRackGapDrop(targetIndex: number) {
+    if (!draggedTile) return
+    if (draggedPlacedTile) return
+    reorderRackTile(draggedTile.index, targetIndex)
   }
 
   function isPlacementAllowed(row: number, col: number) {
@@ -900,12 +910,11 @@ export default function Home() {
     const start = touchStartPosRef.current
     const moved = start ? Math.hypot(touch.clientX - start.x, touch.clientY - start.y) : 999
 
-    setTouchDrag(null)
-    touchStartPosRef.current = null
-    setDraggedTile(null)
-    setDraggedPlacedTile(null)
-
-      if (moved < 10) {
+    if (moved < 10) {
+      setTouchDrag(null)
+      touchStartPosRef.current = null
+      setDraggedTile(null)
+      setDraggedPlacedTile(null)
       if (drag.type === "rack") {
         setSelectedTile({ letter: drag.letter, index: drag.index, isBlank: drag.isBlank })
       } else {
@@ -920,24 +929,42 @@ export default function Home() {
     const rackGapEl = el?.closest("[data-rack-gap]") as HTMLElement | null
     const rackTileEl = el?.closest("[data-rack-tile]") as HTMLElement | null
 
+    setTouchDrag(null)
+    touchStartPosRef.current = null
+
     if (returnEl && drag.type === "placed") {
+      setDraggedTile(null)
+      setDraggedPlacedTile(null)
       returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
     } else if (drag.type === "rack" && rackGapEl) {
-      handleRackGapDrop(parseInt(rackGapEl.dataset.rackGap!))
+      reorderRackTile(drag.index, parseInt(rackGapEl.dataset.rackGap!, 10))
     } else if (drag.type === "rack" && rackTileEl) {
-      handleRackGapDrop(parseInt(rackTileEl.dataset.rackTile!))
+      reorderRackTile(drag.index, parseInt(rackTileEl.dataset.rackTile!, 10))
     } else if (cellEl) {
       const row = parseInt(cellEl.dataset.row!)
       const col = parseInt(cellEl.dataset.col!)
       if (drag.type === "rack") {
+        setDraggedTile({ letter: drag.letter, index: drag.index })
+        setDraggedPlacedTile(null)
         placeTileOnBoard({ letter: drag.letter, index: drag.index, isBlank: drag.isBlank }, row, col)
       } else {
+        setDraggedTile(null)
+        setDraggedPlacedTile({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
         movePlacedTileOnBoard({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank }, row, col)
       }
     } else if (drag.type === "placed") {
+      setDraggedTile(null)
+      setDraggedPlacedTile(null)
       returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
+    } else {
+      setDraggedTile(null)
+      setDraggedPlacedTile(null)
     }
   }
+
+  const gameOver = attemptsLeft === 0
+  const canShare = attemptHistory.length > 0
+  const turnNumber = Math.min(attemptHistory.length + 1, maxAttempts)
 
   function getRating() {
     if (solution.bestScore <= 0) return ""
@@ -992,83 +1019,141 @@ export default function Home() {
     }
   }
 
-  const gameOver = attemptsLeft === 0
-  const canShare = attemptHistory.length > 0
-
   return (
     <main
       style={{
         minHeight: "100vh",
-        backgroundColor: "#f4efe6",
+        background:
+          "linear-gradient(180deg, rgba(251,245,234,0.96) 0%, rgba(242,230,210,0.96) 100%)",
         padding: "clamp(12px, 4vw, 32px)",
-        fontFamily: "Georgia, serif",
+        fontFamily: "var(--font-sans)",
         color: "#2f2419",
+        animation: "fade-up 300ms ease both",
       }}
     >
-      <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "16px", flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: "clamp(28px, 5vw, 40px)", marginBottom: "8px", marginTop: 0 }}>
-            Daily Word Game
-          </h1>
-          <button
-            onClick={() => setShowStats((s) => !s)}
-            style={{
-              padding: "6px 14px",
-              fontSize: "14px",
-              borderRadius: "8px",
-              border: "2px solid #7b6241",
-              backgroundColor: showStats ? "#d7c3a0" : "#fffaf0",
-              cursor: "pointer",
-              color: "#2f2419",
-              fontWeight: "bold",
-            }}
-          >
-            Stats
-          </button>
-          <button
-            onClick={() => setShowArchive((s) => !s)}
-            style={{
-              padding: "6px 14px",
-              fontSize: "14px",
-              borderRadius: "8px",
-              border: "2px solid #7b6241",
-              backgroundColor: showArchive ? "#d7c3a0" : "#fffaf0",
-              cursor: "pointer",
-              color: "#2f2419",
-              fontWeight: "bold",
-            }}
-          >
-            Archive
-          </button>
-          <button
-            onClick={() => setShowTutorial(true)}
-            style={{
-              padding: "6px 14px",
-              fontSize: "14px",
-              borderRadius: "8px",
-              border: "2px solid #7b6241",
-              backgroundColor: "#fffaf0",
-              cursor: "pointer",
-              color: "#2f2419",
-              fontWeight: "bold",
-            }}
-          >
-            How to Play
-          </button>
+      <div style={{ maxWidth: "920px", margin: "0 auto" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: "16px",
+            flexWrap: "wrap",
+            marginBottom: "16px",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "12px",
+                textTransform: "uppercase",
+                letterSpacing: "0.16em",
+                color: "#8a6a42",
+                fontWeight: 800,
+              }}
+            >
+              Daily Puzzle
+            </p>
+            <h1 style={{ fontSize: "clamp(28px, 5vw, 42px)", marginBottom: "6px", marginTop: "6px", fontFamily: "Georgia, serif" }}>
+              Daily Word Game
+            </h1>
+            <p style={{ margin: 0, fontSize: "15px", color: "#6d5537" }}>
+              Puzzle date: <strong>{puzzle.date}</strong>
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button
+              onClick={() => setShowStats((s) => !s)}
+              style={{
+                padding: "8px 14px",
+                fontSize: "13px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.2)",
+                backgroundColor: showStats ? "#d7c3a0" : "rgba(255,250,240,0.8)",
+                cursor: "pointer",
+                color: "#2f2419",
+                fontWeight: "bold",
+              }}
+            >
+              Stats
+            </button>
+            <button
+              onClick={() => setShowArchive((s) => !s)}
+              style={{
+                padding: "8px 14px",
+                fontSize: "13px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.2)",
+                backgroundColor: showArchive ? "#d7c3a0" : "rgba(255,250,240,0.8)",
+                cursor: "pointer",
+                color: "#2f2419",
+                fontWeight: "bold",
+              }}
+            >
+              Archive
+            </button>
+            <button
+              onClick={() => setShowTutorial(true)}
+              style={{
+                padding: "8px 14px",
+                fontSize: "13px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.2)",
+                backgroundColor: "rgba(255,250,240,0.8)",
+                cursor: "pointer",
+                color: "#2f2419",
+                fontWeight: "bold",
+              }}
+            >
+              How to Play
+            </button>
+          </div>
         </div>
-        <p style={{ marginTop: 0, marginBottom: "18px", fontSize: "16px" }}>
-          Puzzle date: <strong>{puzzle.date}</strong>
-        </p>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: "10px",
+            marginBottom: "16px",
+          }}
+        >
+          {[
+            { label: "Turn", value: `${gameOver ? attemptHistory.length : turnNumber}/${maxAttempts}` },
+            { label: "Best Score", value: bestScore },
+            { label: "Optimal", value: solution.bestScore },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                background: "rgba(255,250,240,0.86)",
+                border: "1px solid rgba(123, 98, 65, 0.14)",
+                borderRadius: "16px",
+                padding: "12px 14px",
+                boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
+              }}
+            >
+              <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700 }}>
+                {item.label}
+              </div>
+              <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "2px" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
 
         {showStats && (
           <div
             style={{
-              backgroundColor: "#fffaf0",
-              border: "2px solid #c8b68f",
-              borderRadius: "10px",
+              background: "rgba(255,250,240,0.88)",
+              border: "1px solid rgba(123, 98, 65, 0.14)",
+              borderRadius: "18px",
               padding: "16px 20px",
-              marginBottom: "20px",
-              maxWidth: "480px",
+              marginBottom: "16px",
+              maxWidth: "560px",
+              boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+              animation: "fade-up 220ms ease both",
             }}
           >
             <strong style={{ fontSize: "18px" }}>Your Stats</strong>
@@ -1122,12 +1207,14 @@ export default function Home() {
         {showArchive && (
           <div
             style={{
-              backgroundColor: "#fffaf0",
-              border: "2px solid #c8b68f",
-              borderRadius: "10px",
+              background: "rgba(255,250,240,0.88)",
+              border: "1px solid rgba(123, 98, 65, 0.14)",
+              borderRadius: "18px",
               padding: "16px 20px",
-              marginBottom: "20px",
-              maxWidth: "560px",
+              marginBottom: "16px",
+              maxWidth: "700px",
+              boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+              animation: "fade-up 220ms ease both",
             }}
           >
             <strong style={{ fontSize: "16px" }}>Puzzle Archive</strong>
@@ -1137,6 +1224,9 @@ export default function Home() {
                 flexWrap: "wrap",
                 gap: "8px",
                 marginTop: "12px",
+                maxHeight: "180px",
+                overflowY: "auto",
+                paddingRight: "4px",
               }}
             >
               {DAILY_PUZZLES.filter((p) => p.date <= todayDate)
@@ -1147,14 +1237,14 @@ export default function Home() {
                     key={p.date}
                     onClick={() => selectPuzzleDate(p.date)}
                     style={{
-                      padding: "6px 12px",
+                      padding: "7px 12px",
                       fontSize: "13px",
-                      borderRadius: "6px",
-                      border: "2px solid #7b6241",
+                      borderRadius: "999px",
+                      border: "1px solid rgba(123, 98, 65, 0.2)",
                       backgroundColor: p.date === selectedDate ? "#b98f58" : "#efe2c7",
                       color: p.date === selectedDate ? "#fff" : "#2f2419",
                       cursor: "pointer",
-                      fontWeight: p.date === selectedDate ? "bold" : "normal",
+                      fontWeight: 700,
                     }}
                   >
                     {p.date === todayDate ? `${p.date} (Today)` : p.date}
@@ -1166,57 +1256,75 @@ export default function Home() {
 
         <div
           style={{
-            display: "flex",
-            gap: "16px",
-            flexWrap: "wrap",
-            marginBottom: "16px",
+            background: "rgba(255,250,240,0.88)",
+            border: "1px solid rgba(123, 98, 65, 0.14)",
+            borderRadius: "16px",
+            padding: "14px 16px",
+            marginBottom: "18px",
+            boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
           }}
         >
-          <div
-            style={{
-              backgroundColor: "#fffaf0",
-              border: "2px solid #c8b68f",
-              borderRadius: "10px",
-              padding: "12px 16px",
-            }}
-          >
-            Attempts left: <strong>{attemptsLeft}</strong>
+          <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700, marginBottom: "6px" }}>
+            Current Turn
           </div>
+          <div>{message}</div>
 
-          <div
-            style={{
-              backgroundColor: "#fffaf0",
-              border: "2px solid #c8b68f",
-              borderRadius: "10px",
-              padding: "12px 16px",
-            }}
-          >
-            Best score: <strong>{bestScore}</strong>
-          </div>
+          {(submittedWords.length > 0 || attemptHistory.length > 0) && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "14px",
+                marginTop: "14px",
+              }}
+            >
+              {submittedWords.length > 0 && (
+                <div>
+                  <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", marginBottom: "6px" }}>
+                    Latest Move
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: "18px" }}>
+                    {submittedWords.map((item, index) => (
+                      <li key={index}>
+                        {item.word} - {item.score} points
+                      </li>
+                    ))}
+                  </ul>
+                  <div style={{ marginTop: "8px" }}>Total: {submittedScore}</div>
+                </div>
+              )}
 
-          <div
-            style={{
-              backgroundColor: "#fffaf0",
-              border: "2px solid #c8b68f",
-              borderRadius: "10px",
-              padding: "12px 16px",
-            }}
-          >
-            Optimal score: <strong>{solution.bestScore}</strong>
-          </div>
+              {attemptHistory.length > 0 && (
+                <div>
+                  <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", marginBottom: "6px" }}>
+                    Run So Far
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: "18px" }}>
+                    {attemptHistory.map((attempt, index) => (
+                      <li key={index} style={{ marginBottom: "6px" }}>
+                        {getShareIcon(attempt.totalScore)} {getAttemptLabel(index, attempt.totalScore)}:{" "}
+                        {attempt.words.map((word) => word.word).join(", ")} - {attempt.totalScore}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {canShare && (
             <button
               onClick={shareResults}
               style={{
-                padding: "12px 18px",
-                fontSize: "16px",
-                borderRadius: "8px",
-                border: "2px solid #7b6241",
+                padding: "10px 14px",
+                fontSize: "14px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.2)",
                 backgroundColor: "#f5ead6",
                 cursor: "pointer",
                 color: "#2f2419",
-                fontWeight: "bold",
+                fontWeight: 700,
+                marginTop: "14px",
               }}
             >
               Share Results
@@ -1224,75 +1332,17 @@ export default function Home() {
           )}
         </div>
 
-        <div
-          style={{
-            backgroundColor: "#fffaf0",
-            border: "2px solid #c8b68f",
-            borderRadius: "10px",
-            padding: "14px 16px",
-            marginBottom: "20px",
-            maxWidth: "760px",
-          }}
-        >
-          {message}
-        </div>
-
-        {submittedWords.length > 0 && (
-          <div
-            style={{
-              marginBottom: "20px",
-              padding: "14px 16px",
-              backgroundColor: "#fffaf0",
-              border: "2px solid #c8b68f",
-              borderRadius: "10px",
-              maxWidth: "420px",
-            }}
-          >
-            <strong>Words formed</strong>
-            <ul style={{ marginTop: "10px", paddingLeft: "18px" }}>
-              {submittedWords.map((item, index) => (
-                <li key={index}>
-                  {item.word} - {item.score} points
-                </li>
-              ))}
-            </ul>
-            <strong>Total: {submittedScore}</strong>
-          </div>
-        )}
-
-        {attemptHistory.length > 0 && (
-          <div
-            style={{
-              marginBottom: "20px",
-              padding: "14px 16px",
-              backgroundColor: "#fffaf0",
-              border: "2px solid #c8b68f",
-              borderRadius: "10px",
-              maxWidth: "500px",
-            }}
-          >
-            <strong>Attempts</strong>
-            <ul style={{ marginTop: "10px", paddingLeft: "18px" }}>
-              {attemptHistory.map((attempt, index) => (
-                <li key={index} style={{ marginBottom: "8px" }}>
-                  {getShareIcon(attempt.totalScore)} {getAttemptLabel(index, attempt.totalScore)}:{" "}
-                  {attempt.words.map((word) => word.word).join(", ")} -{" "}
-                  <strong>{attempt.totalScore} points</strong>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {gameOver && (
           <div
             style={{
-              marginBottom: "20px",
-              padding: "16px",
-              backgroundColor: "#eef7e8",
-              border: "2px solid #9eb48d",
-              borderRadius: "10px",
-              maxWidth: "520px",
+              marginBottom: "18px",
+              padding: "20px",
+              background: "linear-gradient(180deg, #f5fbef 0%, #edf6e7 100%)",
+              border: "1px solid rgba(98, 128, 76, 0.22)",
+              borderRadius: "22px",
+              maxWidth: "620px",
+              boxShadow: "0 16px 32px rgba(84, 116, 66, 0.08)",
+              animation: "fade-up 240ms ease both",
             }}
           >
             <strong>{isPerfectFirstTryRun() ? "Perfect First Try" : "Results"}</strong>
@@ -1333,12 +1383,13 @@ export default function Home() {
               <button
                 onClick={resetGame}
                 style={{
-                  padding: "10px 16px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
+                  padding: "11px 16px",
+                  fontSize: "15px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
                   backgroundColor: "#d7c3a0",
                   cursor: "pointer",
+                  fontWeight: 700,
                 }}
               >
                 Reset Today’s Puzzle
@@ -1347,12 +1398,13 @@ export default function Home() {
               <button
                 onClick={shareResults}
                 style={{
-                  padding: "10px 16px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
+                  padding: "11px 16px",
+                  fontSize: "15px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
                   backgroundColor: "#f5ead6",
                   cursor: "pointer",
+                  fontWeight: 700,
                 }}
               >
                 Share Results
@@ -1364,24 +1416,31 @@ export default function Home() {
         <div
           style={{
             display: "flex",
-            gap: "32px",
-            flexWrap: "wrap",
-            alignItems: "flex-start",
+            flexDirection: "column",
+            gap: "18px",
+            alignItems: "stretch",
           }}
         >
           <div
             style={{
-              backgroundColor: "#b98f58",
+              background:
+                "linear-gradient(180deg, #c79a5f 0%, #b98f58 42%, #aa804b 100%)",
               padding: "14px",
-              borderRadius: "12px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+              borderRadius: "22px",
+              boxShadow: "0 16px 34px rgba(94, 66, 33, 0.18)",
+              width: "100%",
+              maxWidth: "100%",
+              overflowX: "auto",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: `repeat(${boardSize}, 54px)`,
-                gap: "4px",
+                gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))`,
+                gap: `${boardGap}px`,
+                width: "100%",
+                maxWidth: boardMaxWidth,
+                margin: "0 auto",
               }}
             >
               {Array.from({ length: boardSize * boardSize }).map((_, index) => {
@@ -1429,8 +1488,8 @@ export default function Home() {
                     }
                     onTouchEnd={isMovablePlacedTile ? handleTouchEnd : undefined}
                     style={{
-                      width: "54px",
-                      height: "54px",
+                      width: "100%",
+                      aspectRatio: "1 / 1",
                       border:
                         draggedTile && !letter
                           ? "2px dashed #7b6241"
@@ -1438,7 +1497,7 @@ export default function Home() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: hasLetter ? "24px" : "11px",
+                      fontSize: hasLetter ? boardTileFontSize : boardBonusFontSize,
                       fontWeight: "bold",
                       backgroundColor: getCellBackground(row, col, Boolean(letter)),
                       cursor: isMovablePlacedTile
@@ -1448,8 +1507,10 @@ export default function Home() {
                         : "pointer",
                       color: optimalLetter ? "#1d4ed8" : hasLetter ? "#2f2419" : "#4b5563",
                       position: "relative",
-                      borderRadius: "6px",
+                      borderRadius: "10px",
                       boxSizing: "border-box",
+                      transition: "transform 160ms ease, box-shadow 160ms ease",
+                      boxShadow: hasLetter ? "0 3px 6px rgba(0,0,0,0.08)" : "none",
                       opacity:
                         draggedPlacedTile &&
                         draggedPlacedTile.row === row &&
@@ -1465,7 +1526,7 @@ export default function Home() {
                           position: "absolute",
                           bottom: "4px",
                           right: "5px",
-                          fontSize: "10px",
+                          fontSize: boardScoreFontSize,
                           fontWeight: "bold",
                           color: "#4b3a28",
                         }}
@@ -1491,15 +1552,16 @@ export default function Home() {
                 onClick={submitMove}
                 disabled={gameOver}
                 style={{
-                  padding: "12px 18px",
+                  padding: "13px 20px",
                   fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
-                  backgroundColor: gameOver ? "#ddd6c8" : "#d7c3a0",
+                  borderRadius: "14px",
+                  border: "1px solid rgba(69,50,27,0.18)",
+                  backgroundColor: gameOver ? "#ddd6c8" : "#fff4d8",
                   cursor: gameOver ? "not-allowed" : "pointer",
                   color: "#2f2419",
-                  fontWeight: "bold",
-                  minWidth: "150px",
+                  fontWeight: 800,
+                  minWidth: "168px",
+                  boxShadow: gameOver ? "none" : "0 8px 18px rgba(78, 56, 28, 0.14)",
                 }}
               >
                 Submit Move
@@ -1509,31 +1571,67 @@ export default function Home() {
                 onClick={shuffleRack}
                 disabled={gameOver}
                 style={{
-                  padding: "12px 18px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
+                  padding: "10px 14px",
+                  fontSize: "14px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(69,50,27,0.18)",
                   backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
                   cursor: gameOver ? "not-allowed" : "pointer",
                   color: "#2f2419",
-                  fontWeight: "bold",
-                  minWidth: "150px",
+                  fontWeight: 700,
+                  minWidth: "104px",
                 }}
               >
-                Shuffle Tiles
+                Shuffle
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!hintUsed) {
+                    setHintUsed(true)
+                  }
+                  setShowHint((prev) => !prev)
+                }}
+                disabled={gameOver}
+                title="Toggle the optimal placement hint"
+                style={{
+                  padding: "10px 14px",
+                  fontSize: "14px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(69,50,27,0.18)",
+                  backgroundColor: gameOver ? "#ddd6c8" : showHint ? "#d7c3a0" : "#efe2c7",
+                  cursor: gameOver ? "not-allowed" : "pointer",
+                  color: "#2f2419",
+                  fontWeight: 700,
+                  minWidth: "112px",
+                }}
+              >
+                {showHint ? "Hide Hint" : "Show Hint"}
               </button>
             </div>
           </div>
 
-          <div style={{ minWidth: "min(360px, 100%)" }}>
-            <h2 style={{ marginTop: 0 }}>Your Tiles</h2>
+          <div
+            style={{
+              width: "100%",
+              background: "rgba(255,250,240,0.84)",
+              border: "1px solid rgba(123, 98, 65, 0.14)",
+              borderRadius: "20px",
+              padding: "16px",
+              boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
+              <h2 style={{ margin: 0, fontSize: "18px" }}>Your Tiles</h2>
+              <div style={{ fontSize: "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
+            </div>
 
             <div
               style={{
                 display: "flex",
                 alignItems: "stretch",
-                gap: "0px",
-                marginTop: "10px",
+                gap: "4px",
+                justifyContent: "center",
                 flexWrap: "wrap",
               }}
             >
@@ -1560,17 +1658,27 @@ export default function Home() {
                     }}
                     style={{
                       width: "10px",
-                      minHeight: "56px",
+                      minHeight: "58px",
                       backgroundColor:
                         rackDropIndex === index ? "#2563eb" : "transparent",
-                      borderRadius: "6px",
-                      marginRight: "4px",
+                      borderRadius: "999px",
                     }}
                   />
 
                   <div
                     data-rack-tile={index}
                     draggable={!gameOver}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      if (draggedTile) setRackDropIndex(index)
+                    }}
+                    onDragLeave={() => {
+                      if (rackDropIndex === index) setRackDropIndex(null)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      handleRackGapDrop(index)
+                    }}
                     onDragStart={(e) => handleTileDragStart(e, tile, index)}
                     onDragEnd={handleRackTileDragEnd}
                     onClick={() => handleTileClick(tile, index)}
@@ -1593,10 +1701,11 @@ export default function Home() {
                       backgroundColor: "#e7d3a8",
                       cursor: gameOver ? "default" : "grab",
                       position: "relative",
-                      borderRadius: "8px",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.12)",
+                      borderRadius: "12px",
+                      boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
                       color: "#2f2419",
                       opacity: draggedTile?.index === index ? 0.6 : 1,
+                      transition: "transform 160ms ease, box-shadow 160ms ease",
                     }}
                   >
                     {tile}
@@ -1630,11 +1739,10 @@ export default function Home() {
                       }}
                       style={{
                         width: "10px",
-                        minHeight: "56px",
+                        minHeight: "58px",
                         backgroundColor:
                           rackDropIndex === rack.length ? "#2563eb" : "transparent",
-                        borderRadius: "6px",
-                        marginLeft: "4px",
+                        borderRadius: "999px",
                       }}
                     />
                   )}
@@ -1643,96 +1751,44 @@ export default function Home() {
             </div>
 
             <div
-              data-return-zone="true"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault()
-                if (draggedPlacedTile) {
-                  returnPlacedTileToRack(draggedPlacedTile)
-                }
-              }}
               style={{
+                display: "flex",
+                gap: "10px",
                 marginTop: "18px",
-                width: "100%",
-                maxWidth: "360px",
-                minHeight: "64px",
-                border:
-                  draggedPlacedTile || (touchDrag?.type === "placed")
-                    ? "2px dashed #2563eb"
-                    : "2px dashed #7b6241",
-                borderRadius: "10px",
-                backgroundColor: "#fffaf0",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center",
-                padding: "12px",
-                color: "#5b4630",
-                fontWeight: "bold",
-              }}
-            >
-              Return Tiles Here
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                marginTop: "24px",
                 flexWrap: "wrap",
+                justifyContent: "center",
               }}
             >
               <button
                 onClick={undoLastTile}
                 disabled={gameOver || placedTiles.length === 0}
                 style={{
-                  padding: "12px 18px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
+                  padding: "10px 14px",
+                  fontSize: "14px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
                   backgroundColor:
                     gameOver || placedTiles.length === 0 ? "#ddd6c8" : "#efe2c7",
                   cursor: gameOver || placedTiles.length === 0 ? "not-allowed" : "pointer",
                   color: "#2f2419",
-                  fontWeight: "bold",
+                  fontWeight: 700,
                 }}
               >
-                Undo Tile
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowHint(true)
-                  setHintUsed(true)
-                }}
-                disabled={gameOver || hintUsed}
-                title="Highlight where to place tiles for the best score"
-                style={{
-                  padding: "12px 18px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
-                  backgroundColor: gameOver || hintUsed ? "#ddd6c8" : "#efe2c7",
-                  cursor: gameOver || hintUsed ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: "bold",
-                }}
-              >
-                {hintUsed ? "Hint Used" : "Show Hint"}
+                Undo
               </button>
 
               <button
                 onClick={clearCurrentMove}
                 disabled={gameOver}
                 style={{
-                  padding: "12px 18px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
+                  padding: "10px 14px",
+                  fontSize: "14px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
                   backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
                   cursor: gameOver ? "not-allowed" : "pointer",
                   color: "#2f2419",
-                  fontWeight: "bold",
+                  fontWeight: 700,
                 }}
               >
                 Clear Move
@@ -1741,14 +1797,14 @@ export default function Home() {
               <button
                 onClick={resetGame}
                 style={{
-                  padding: "12px 18px",
-                  fontSize: "16px",
-                  borderRadius: "8px",
-                  border: "2px solid #7b6241",
+                  padding: "10px 14px",
+                  fontSize: "14px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
                   backgroundColor: "#f5ead6",
                   cursor: "pointer",
                   color: "#2f2419",
-                  fontWeight: "bold",
+                  fontWeight: 700,
                 }}
               >
                 Reset Puzzle
