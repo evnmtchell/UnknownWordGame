@@ -108,6 +108,14 @@ function getLocalDateString() {
   return new Intl.DateTimeFormat("en-CA").format(new Date())
 }
 
+function triggerHapticFeedback(pattern: number | number[] = 12) {
+  if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
+    return
+  }
+
+  navigator.vibrate(pattern)
+}
+
 export default function Home() {
   const todayDate = useMemo(() => getLocalDateString(), [])
   const [selectedDate, setSelectedDate] = useState(todayDate)
@@ -162,6 +170,7 @@ export default function Home() {
   const [rackDropIndex, setRackDropIndex] = useState<number | null>(null)
   const [hintLevel, setHintLevel] = useState(0)
   const [showHint, setShowHint] = useState(false)
+  const [showMoreActions, setShowMoreActions] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
   const statsUpdatedRef = useRef(false)
@@ -365,6 +374,7 @@ export default function Home() {
     }
 
     setRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
+    triggerHapticFeedback(10)
     draggedTileRef.current = null
     setDraggedTile(null)
     setSelectedTile(null)
@@ -444,6 +454,7 @@ export default function Home() {
     setSelectedTile(null)
     setDraggedTile(null)
     setRackDropIndex(null)
+    triggerHapticFeedback(tileData.isBlank ? [10, 20, 10] : 12)
     setMessage(
       tileData.isBlank
         ? `Blank tile placed as ${resolvedLetter}.`
@@ -481,6 +492,7 @@ export default function Home() {
     setDraggedPlacedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
+    triggerHapticFeedback(10)
     setMessage(tile.isBlank ? `Moved blank tile (${tile.letter}).` : `Moved ${tile.letter}.`)
   }
 
@@ -561,6 +573,7 @@ export default function Home() {
     setDraggedPlacedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
+    triggerHapticFeedback(10)
     setMessage(tile.isBlank ? "Returned blank tile to the rack." : `Returned ${tile.letter} to the rack.`)
   }
 
@@ -818,9 +831,9 @@ export default function Home() {
 
     const totalScore = wordsFormed.reduce((sum, item) => sum + item.score, 0)
     const wordResults = wordsFormed.map(({ word, score }) => ({ word, score }))
-    const solvedOptimallyOnFirstTry =
-      attemptHistory.length === 0 && totalScore >= solution.bestScore
-    const newAttemptsLeft = solvedOptimallyOnFirstTry ? 0 : attemptsLeft - 1
+    const solvedOptimally = totalScore >= solution.bestScore
+    const solvedOptimallyOnFirstTry = attemptHistory.length === 0 && solvedOptimally
+    const newAttemptsLeft = solvedOptimally ? 0 : attemptsLeft - 1
     const newBestScore = Math.max(bestScore, totalScore)
     const newAttempt = {
       words: wordResults,
@@ -832,9 +845,12 @@ export default function Home() {
     setAttemptsLeft(newAttemptsLeft)
     setBestScore(newBestScore)
     setAttemptHistory([...attemptHistory, newAttempt])
+    triggerHapticFeedback(solvedOptimally ? [18, 24, 18] : [12, 18, 12])
     setMessage(
       solvedOptimallyOnFirstTry
         ? `Perfect first try. You scored the optimal ${solution.bestScore}, so the game is over.`
+        : solvedOptimally
+        ? `You found the optimal ${solution.bestScore}, so the game is over.`
         : `You scored ${totalScore}. Optimal score: ${solution.bestScore}.`
     )
 
@@ -867,6 +883,7 @@ export default function Home() {
     const last = placedTiles[placedTiles.length - 1]
     setPlacedTiles((prev) => prev.slice(0, -1))
     setRack((prev) => [...prev, last.isBlank ? BLANK_TILE : last.letter])
+    triggerHapticFeedback(8)
     setMessage(last.isBlank ? "Returned blank tile to the rack." : `Returned ${last.letter} to the rack.`)
   }
 
@@ -877,6 +894,7 @@ export default function Home() {
     setDraggedTile(null)
     setDraggedPlacedTile(null)
     setRackDropIndex(null)
+    triggerHapticFeedback(8)
     setMessage("Board cleared. Start a new move.")
   }
 
@@ -894,7 +912,9 @@ export default function Home() {
     setRackDropIndex(null)
     setHintLevel(0)
     setShowHint(false)
+    setShowMoreActions(false)
     statsUpdatedRef.current = false
+    triggerHapticFeedback([10, 18, 10])
     setMessage("New game started.")
     localStorage.removeItem(storageKey)
   }
@@ -953,6 +973,7 @@ export default function Home() {
     setRackDropIndex(null)
     setHintLevel(0)
     setShowHint(false)
+    setShowMoreActions(false)
     setShowArchive(false)
     statsUpdatedRef.current = false
     setMessage("Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
@@ -1180,12 +1201,26 @@ export default function Home() {
     setRackDropIndex(null)
     setHintLevel(2)
     setShowHint(true)
+    triggerHapticFeedback([10, 20, 10])
   }
 
   function getHintStatusText() {
     if (hintLevel === 0) return ""
     if (hintLevel === 1) return "Hint used"
     return "Hint used: one tile placed"
+  }
+
+  function handleHintClick() {
+    if (hintLevel === 0) {
+      setHintLevel(1)
+      setShowHint(true)
+      triggerHapticFeedback(10)
+      return
+    }
+
+    if (hintLevel === 1) {
+      applySecondHint()
+    }
   }
 
   async function shareResults() {
@@ -1305,33 +1340,64 @@ export default function Home() {
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: "10px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            flexWrap: "wrap",
             marginBottom: "16px",
+            padding: "12px 16px",
+            borderRadius: "20px",
+            background: "linear-gradient(180deg, rgba(255,250,240,0.92) 0%, rgba(247,237,220,0.92) 100%)",
+            border: "1px solid rgba(123, 98, 65, 0.14)",
+            boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
           }}
         >
-          {[
-            { label: "Turn", value: `${gameOver ? attemptHistory.length : turnNumber}/${maxAttempts}` },
-            { label: "Best Score", value: bestScore },
-            { label: "Optimal", value: solution.bestScore },
-          ].map((item) => (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <div
-              key={item.label}
               style={{
-                background: "rgba(255,250,240,0.86)",
-                border: "1px solid rgba(123, 98, 65, 0.14)",
-                borderRadius: "16px",
-                padding: "12px 14px",
-                boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
+                background: "#dbe9ff",
+                color: "#26456e",
+                borderRadius: "14px",
+                padding: "10px 14px",
+                minWidth: "132px",
               }}
             >
-              <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700 }}>
-                {item.label}
+              <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, opacity: 0.72 }}>
+                Attempts
               </div>
-              <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "2px" }}>{item.value}</div>
+              <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: 1.1 }}>
+                {gameOver ? attemptHistory.length : turnNumber}/{maxAttempts}
+              </div>
             </div>
-          ))}
+
+            <div
+              style={{
+                background: "#fff7dc",
+                color: "#6b4f14",
+                borderRadius: "999px",
+                padding: "8px 14px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontWeight: 800,
+              }}
+            >
+              <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.72 }}>
+                Optimal
+              </span>
+              <span style={{ fontSize: "24px", lineHeight: 1 }}>{solution.bestScore}</span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 800 }}>
+                Best Score
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 900, color: "#2f2419" }}>{bestScore}</div>
+            </div>
+          </div>
         </div>
 
         {showStats && (
@@ -1877,281 +1943,339 @@ export default function Home() {
 
             <div
               style={{
-                display: "flex",
-                gap: "12px",
+                width: "100%",
+                background: "rgba(255,250,240,0.84)",
+                border: "1px solid rgba(123, 98, 65, 0.14)",
+                borderRadius: "20px",
+                padding: "16px",
+                boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
                 marginTop: "16px",
-                flexWrap: "wrap",
-                justifyContent: "center",
               }}
             >
-              <button
-                onClick={submitMove}
-                disabled={gameOver}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
+                <h2 style={{ margin: 0, fontSize: "18px" }}>Your Tiles</h2>
+                <div style={{ fontSize: "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
+              </div>
+
+              <div
                 style={{
-                  padding: "13px 20px",
-                  fontSize: "16px",
-                  borderRadius: "14px",
-                  border: "1px solid rgba(69,50,27,0.18)",
-                  backgroundColor: gameOver ? "#ddd6c8" : "#fff4d8",
-                  cursor: gameOver ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: 800,
-                  minWidth: "168px",
-                  boxShadow: gameOver ? "none" : "0 8px 18px rgba(78, 56, 28, 0.14)",
+                  display: "flex",
+                  alignItems: "stretch",
+                  gap: "4px",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
                 }}
               >
-                Submit Move
-              </button>
-
-              <button
-                onClick={shuffleRack}
-                disabled={gameOver}
-                style={{
-                  padding: "10px 14px",
-                  fontSize: "14px",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(69,50,27,0.18)",
-                  backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
-                  cursor: gameOver ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: 700,
-                  minWidth: "104px",
-                }}
-              >
-                Shuffle
-              </button>
-
-              <button
-                onClick={() => {
-                  if (hintLevel === 0) {
-                    setHintLevel(1)
-                    setShowHint(true)
-                    return
-                  }
-
-                  if (hintLevel === 1) {
-                    applySecondHint()
-                  }
-                }}
-                disabled={gameOver || hintLevel >= 2}
-                title="First click highlights the best placement. Second click places the next correct tile."
-                style={{
-                  padding: "10px 14px",
-                  fontSize: "14px",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(69,50,27,0.18)",
-                  backgroundColor: gameOver || hintLevel >= 2 ? "#ddd6c8" : showHint ? "#d7c3a0" : "#efe2c7",
-                  cursor: gameOver || hintLevel >= 2 ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: 700,
-                  minWidth: "112px",
-                }}
-              >
-                {hintLevel === 0 ? "Show Hint" : hintLevel === 1 ? "Place Hint Tile" : "Hint Complete"}
-              </button>
-            </div>
-          </div>
-
-          <div
-            style={{
-              width: "100%",
-              background: "rgba(255,250,240,0.84)",
-              border: "1px solid rgba(123, 98, 65, 0.14)",
-              borderRadius: "20px",
-              padding: "16px",
-              boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
-              <h2 style={{ margin: 0, fontSize: "18px" }}>Your Tiles</h2>
-              <div style={{ fontSize: "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "stretch",
-                gap: "4px",
-                justifyContent: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              {rack.map((tile, index) => (
-                <div
-                  key={`${tile}-${index}-wrapper`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
+                {rack.map((tile, index) => (
                   <div
-                    data-rack-gap={index}
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      if (draggedTile) setRackDropIndex(index)
-                    }}
-                    onDragLeave={() => {
-                      if (rackDropIndex === index) setRackDropIndex(null)
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      handleRackGapDrop(index)
-                    }}
+                    key={`${tile}-${index}-wrapper`}
                     style={{
-                      width: "10px",
-                      minHeight: "58px",
-                      backgroundColor:
-                        rackDropIndex === index ? "#2563eb" : "transparent",
-                      borderRadius: "999px",
-                    }}
-                  />
-
-                  <div
-                    data-rack-tile={index}
-                    draggable={!gameOver}
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      if (draggedTile) setRackDropIndex(index)
-                    }}
-                    onDragLeave={() => {
-                      if (rackDropIndex === index) setRackDropIndex(null)
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      handleRackGapDrop(index)
-                    }}
-                    onDragStart={(e) => handleTileDragStart(e, tile, index)}
-                    onDragEnd={handleRackTileDragEnd}
-                    onClick={() => handleTileClick(tile, index)}
-                    onTouchStart={(e) => handleRackTouchStart(e, tile, index)}
-                    style={{
-                      width: "56px",
-                      height: "56px",
-                      border:
-                        selectedTile?.index === index
-                          ? "3px solid #2563eb"
-                          : draggedTile?.index === index
-                          ? "3px solid #7b6241"
-                          : "2px solid #7b6241",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "26px",
-                      fontWeight: "bold",
-                      backgroundColor: "#e7d3a8",
-                      cursor: gameOver ? "default" : "grab",
-                      position: "relative",
-                      borderRadius: "12px",
-                      boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
-                      color: "#2f2419",
-                      opacity: draggedTile?.index === index ? 0.6 : 1,
-                      transition: "transform 160ms ease, box-shadow 160ms ease",
-                      touchAction: "none",
-                      WebkitUserSelect: "none",
-                      userSelect: "none",
                     }}
                   >
-                    {tile}
-                    <span
-                      style={{
-                        position: "absolute",
-                        bottom: "4px",
-                        right: "6px",
-                        fontSize: "11px",
-                        fontWeight: "bold",
-                        color: "#4b3a28",
-                      }}
-                    >
-                      {tile === BLANK_TILE ? 0 : LETTER_SCORES[tile] || 0}
-                    </span>
-                  </div>
-
-                  {index === rack.length - 1 && (
                     <div
-                      data-rack-gap={rack.length}
+                      data-rack-gap={index}
                       onDragOver={(e) => {
                         e.preventDefault()
-                        if (draggedTile) setRackDropIndex(rack.length)
+                        if (draggedTile) setRackDropIndex(index)
                       }}
                       onDragLeave={() => {
-                        if (rackDropIndex === rack.length) setRackDropIndex(null)
+                        if (rackDropIndex === index) setRackDropIndex(null)
                       }}
                       onDrop={(e) => {
                         e.preventDefault()
-                        handleRackGapDrop(rack.length)
+                        handleRackGapDrop(index)
                       }}
                       style={{
                         width: "10px",
                         minHeight: "58px",
                         backgroundColor:
-                          rackDropIndex === rack.length ? "#2563eb" : "transparent",
+                          rackDropIndex === index ? "#2563eb" : "transparent",
                         borderRadius: "999px",
                       }}
                     />
+
+                    <div
+                      data-rack-tile={index}
+                      draggable={!gameOver}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        if (draggedTile) setRackDropIndex(index)
+                      }}
+                      onDragLeave={() => {
+                        if (rackDropIndex === index) setRackDropIndex(null)
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        handleRackGapDrop(index)
+                      }}
+                      onDragStart={(e) => handleTileDragStart(e, tile, index)}
+                      onDragEnd={handleRackTileDragEnd}
+                      onClick={() => handleTileClick(tile, index)}
+                      onTouchStart={(e) => handleRackTouchStart(e, tile, index)}
+                      style={{
+                        width: "56px",
+                        height: "56px",
+                        border:
+                          selectedTile?.index === index
+                            ? "3px solid #2563eb"
+                            : draggedTile?.index === index
+                            ? "3px solid #7b6241"
+                            : "2px solid #7b6241",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "26px",
+                        fontWeight: "bold",
+                        backgroundColor: "#e7d3a8",
+                        cursor: gameOver ? "default" : "grab",
+                        position: "relative",
+                        borderRadius: "12px",
+                        boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
+                        color: "#2f2419",
+                        opacity: draggedTile?.index === index ? 0.6 : 1,
+                        transition: "transform 160ms ease, box-shadow 160ms ease",
+                        touchAction: "none",
+                        WebkitUserSelect: "none",
+                        userSelect: "none",
+                      }}
+                    >
+                      {tile}
+                      <span
+                        style={{
+                          position: "absolute",
+                          bottom: "4px",
+                          right: "6px",
+                          fontSize: "11px",
+                          fontWeight: "bold",
+                          color: "#4b3a28",
+                        }}
+                      >
+                        {tile === BLANK_TILE ? 0 : LETTER_SCORES[tile] || 0}
+                      </span>
+                    </div>
+
+                    {index === rack.length - 1 && (
+                      <div
+                        data-rack-gap={rack.length}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          if (draggedTile) setRackDropIndex(rack.length)
+                        }}
+                        onDragLeave={() => {
+                          if (rackDropIndex === rack.length) setRackDropIndex(null)
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          handleRackGapDrop(rack.length)
+                        }}
+                        style={{
+                          width: "10px",
+                          minHeight: "58px",
+                          backgroundColor:
+                            rackDropIndex === rack.length ? "#2563eb" : "transparent",
+                          borderRadius: "999px",
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(80px, 0.95fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(180px, 1.4fr)",
+                  gap: "10px",
+                  marginTop: "18px",
+                  alignItems: "stretch",
+                }}
+              >
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setShowMoreActions((prev) => !prev)}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      minHeight: "54px",
+                      padding: "10px 12px",
+                      fontSize: "14px",
+                      borderRadius: "18px",
+                      border: "1px solid rgba(123, 98, 65, 0.2)",
+                      backgroundColor: showMoreActions ? "#d7c3a0" : "#efe2c7",
+                      cursor: "pointer",
+                      color: "#2f2419",
+                      fontWeight: 800,
+                    }}
+                  >
+                    More
+                  </button>
+
+                  {showMoreActions && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        bottom: "calc(100% + 10px)",
+                        minWidth: "210px",
+                        background: "rgba(255,250,240,0.98)",
+                        border: "1px solid rgba(123, 98, 65, 0.16)",
+                        borderRadius: "18px",
+                        boxShadow: "0 16px 34px rgba(78, 56, 28, 0.16)",
+                        padding: "10px",
+                        display: "grid",
+                        gap: "8px",
+                        zIndex: 20,
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          handleHintClick()
+                          if (hintLevel >= 1) setShowMoreActions(false)
+                        }}
+                        disabled={gameOver || hintLevel >= 2}
+                        title="First click highlights the best placement. Second click places the next correct tile."
+                        style={{
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          borderRadius: "14px",
+                          border: "1px solid rgba(69,50,27,0.18)",
+                          backgroundColor: gameOver || hintLevel >= 2 ? "#ddd6c8" : showHint ? "#d7c3a0" : "#efe2c7",
+                          cursor: gameOver || hintLevel >= 2 ? "not-allowed" : "pointer",
+                          color: "#2f2419",
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        {hintLevel === 0 ? "Show Hint" : hintLevel === 1 ? "Place Hint Tile" : "Hint Complete"}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          clearCurrentMove()
+                          setShowMoreActions(false)
+                        }}
+                        disabled={gameOver}
+                        style={{
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          borderRadius: "14px",
+                          border: "1px solid rgba(123, 98, 65, 0.2)",
+                          backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
+                          cursor: gameOver ? "not-allowed" : "pointer",
+                          color: "#2f2419",
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        Clear Move
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          resetGame()
+                          setShowMoreActions(false)
+                        }}
+                        style={{
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          borderRadius: "14px",
+                          border: "1px solid rgba(123, 98, 65, 0.2)",
+                          backgroundColor: "#f5ead6",
+                          cursor: "pointer",
+                          color: "#2f2419",
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        Reset Puzzle
+                      </button>
+
+                      {canShare && (
+                        <button
+                          onClick={() => {
+                            shareResults()
+                            setShowMoreActions(false)
+                          }}
+                          style={{
+                            padding: "10px 12px",
+                            fontSize: "14px",
+                            borderRadius: "14px",
+                            border: "1px solid rgba(123, 98, 65, 0.2)",
+                            backgroundColor: "#f5ead6",
+                            cursor: "pointer",
+                            color: "#2f2419",
+                            fontWeight: 700,
+                            textAlign: "left",
+                          }}
+                        >
+                          Share Results
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              ))}
-            </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-                marginTop: "18px",
-                flexWrap: "wrap",
-                justifyContent: "center",
-              }}
-            >
-              <button
-                onClick={undoLastTile}
-                disabled={gameOver || placedTiles.length === 0}
-                style={{
-                  padding: "10px 14px",
-                  fontSize: "14px",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(123, 98, 65, 0.2)",
-                  backgroundColor:
-                    gameOver || placedTiles.length === 0 ? "#ddd6c8" : "#efe2c7",
-                  cursor: gameOver || placedTiles.length === 0 ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: 700,
-                }}
-              >
-                Undo
-              </button>
+                <button
+                  onClick={undoLastTile}
+                  disabled={gameOver || placedTiles.length === 0}
+                  style={{
+                    width: "100%",
+                    minHeight: "54px",
+                    padding: "10px 14px",
+                    fontSize: "15px",
+                    borderRadius: "18px",
+                    border: "1px solid rgba(123, 98, 65, 0.2)",
+                    backgroundColor:
+                      gameOver || placedTiles.length === 0 ? "#ddd6c8" : "#efe2c7",
+                    cursor: gameOver || placedTiles.length === 0 ? "not-allowed" : "pointer",
+                    color: "#2f2419",
+                    fontWeight: 800,
+                  }}
+                >
+                  Recall
+                </button>
 
-              <button
-                onClick={clearCurrentMove}
-                disabled={gameOver}
-                style={{
-                  padding: "10px 14px",
-                  fontSize: "14px",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(123, 98, 65, 0.2)",
-                  backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
-                  cursor: gameOver ? "not-allowed" : "pointer",
-                  color: "#2f2419",
-                  fontWeight: 700,
-                }}
-              >
-                Clear Move
-              </button>
+                <button
+                  onClick={shuffleRack}
+                  disabled={gameOver}
+                  style={{
+                    width: "100%",
+                    minHeight: "54px",
+                    padding: "10px 14px",
+                    fontSize: "15px",
+                    borderRadius: "18px",
+                    border: "1px solid rgba(69,50,27,0.18)",
+                    backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
+                    cursor: gameOver ? "not-allowed" : "pointer",
+                    color: "#2f2419",
+                    fontWeight: 800,
+                  }}
+                >
+                  Shuffle
+                </button>
 
-              <button
-                onClick={resetGame}
-                style={{
-                  padding: "10px 14px",
-                  fontSize: "14px",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(123, 98, 65, 0.2)",
-                  backgroundColor: "#f5ead6",
-                  cursor: "pointer",
-                  color: "#2f2419",
-                  fontWeight: 700,
-                }}
-              >
-                Reset Puzzle
-              </button>
+                <button
+                  onClick={submitMove}
+                  disabled={gameOver}
+                  style={{
+                    width: "100%",
+                    minHeight: "54px",
+                    padding: "12px 18px",
+                    fontSize: "16px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(34,25,13,0.12)",
+                    backgroundColor: gameOver ? "#ddd6c8" : "#17120d",
+                    cursor: gameOver ? "not-allowed" : "pointer",
+                    color: gameOver ? "#5f5448" : "#fffaf1",
+                    fontWeight: 900,
+                    boxShadow: gameOver ? "none" : "0 10px 20px rgba(23,18,13,0.25)",
+                  }}
+                >
+                  Submit Move
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2161,8 +2285,8 @@ export default function Home() {
         <div
           style={{
             position: "fixed",
-            left: touchDrag.x - 18,
-            top: touchDrag.y - 40,
+            left: touchDrag.x - 28,
+            top: touchDrag.y - 14,
             width: "56px",
             height: "56px",
             backgroundColor: "#e7d3a8",
