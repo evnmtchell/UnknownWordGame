@@ -119,6 +119,7 @@ function triggerHapticFeedback(pattern: number | number[] = 12) {
 export default function Home() {
   const todayDate = useMemo(() => getLocalDateString(), [])
   const [selectedDate, setSelectedDate] = useState(todayDate)
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
@@ -138,20 +139,28 @@ export default function Home() {
   )
   const solution = useMemo(() => solvePuzzle(puzzle), [puzzle])
 
+  const isCompactMobile =
+    viewportSize.width > 0 &&
+    viewportSize.width <= 430 &&
+    viewportSize.height > 0 &&
+    viewportSize.height <= 950
   const boardSize = puzzle.boardSize
   const maxAttempts = 3
   const startingRack = puzzle.rack
   const storageKey = `daily-word-game-${puzzle.date}`
-  const boardGap = 4
-  const boardMaxWidth = `${boardSize * 54 + (boardSize - 1) * boardGap}px`
-  const boardTileFontSize = "clamp(18px, 5vw, 24px)"
-  const boardBonusFontSize = "clamp(8px, 2.4vw, 11px)"
-  const boardScoreFontSize = "clamp(8px, 2vw, 10px)"
+  const boardGap = isCompactMobile ? 3 : 4
+  const boardCellSize = isCompactMobile ? 46 : 54
+  const rackTileSize = isCompactMobile ? 46 : 56
+  const actionButtonMinHeight = isCompactMobile ? 46 : 54
+  const boardMaxWidth = `${boardSize * boardCellSize + (boardSize - 1) * boardGap}px`
+  const boardTileFontSize = isCompactMobile ? "clamp(16px, 4.8vw, 20px)" : "clamp(18px, 5vw, 24px)"
+  const boardBonusFontSize = isCompactMobile ? "clamp(7px, 2vw, 9px)" : "clamp(8px, 2.4vw, 11px)"
+  const boardScoreFontSize = isCompactMobile ? "clamp(7px, 1.8vw, 9px)" : "clamp(8px, 2vw, 10px)"
   const validWordOutlineColor = "#72ad2d"
-  const validWordOutlineThickness = 6
+  const validWordOutlineThickness = isCompactMobile ? 5 : 6
   const validWordOutlineInset = -4
   const validWordOutlineBridge = boardGap / 2 + 5
-  const validWordOutlineCornerOffset = 10
+  const validWordOutlineCornerOffset = isCompactMobile ? 8 : 10
 
   const [rack, setRack] = useState(startingRack)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
@@ -177,6 +186,19 @@ export default function Home() {
 
   const filledCells = puzzle.filledCells
   const bonusCells = puzzle.bonusCells
+
+  useEffect(() => {
+    function updateViewportSize() {
+      setViewportSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      })
+    }
+
+    updateViewportSize()
+    window.addEventListener("resize", updateViewportSize)
+    return () => window.removeEventListener("resize", updateViewportSize)
+  }, [])
 
   useEffect(() => {
     const saved = localStorage.getItem(storageKey)
@@ -390,7 +412,10 @@ export default function Home() {
   }
 
   function isPlacementAllowed(row: number, col: number) {
-    if (placedTiles.length <= 1) return true
+    if (placedTiles.length === 0) return true
+    if (placedTiles.length === 1) {
+      return row === placedTiles[0].row || col === placedTiles[0].col
+    }
 
     const allSameRow = placedTiles.every(
       (tile) => tile.row === placedTiles[0].row
@@ -410,7 +435,10 @@ export default function Home() {
     row: number,
     col: number
   ) {
-    if (tiles.length <= 1) return true
+    if (tiles.length === 0) return true
+    if (tiles.length === 1) {
+      return row === tiles[0].row || col === tiles[0].col
+    }
 
     const allSameRow = tiles.every((tile) => tile.row === tiles[0].row)
     const allSameCol = tiles.every((tile) => tile.col === tiles[0].col)
@@ -1248,31 +1276,33 @@ export default function Home() {
   return (
     <main
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         background:
           "linear-gradient(180deg, rgba(251,245,234,0.96) 0%, rgba(242,230,210,0.96) 100%)",
-        padding: "clamp(12px, 4vw, 32px)",
+        padding: isCompactMobile
+          ? "max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom))"
+          : "clamp(12px, 4vw, 32px)",
         fontFamily: "var(--font-sans)",
         color: "#2f2419",
         animation: "fade-up 300ms ease both",
       }}
     >
-      <div style={{ maxWidth: "920px", margin: "0 auto" }}>
+      <div style={{ maxWidth: isCompactMobile ? "100%" : "920px", margin: "0 auto" }}>
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
-            gap: "16px",
+            gap: isCompactMobile ? "8px" : "16px",
             flexWrap: "wrap",
-            marginBottom: "16px",
+            marginBottom: isCompactMobile ? "8px" : "16px",
           }}
         >
           <div>
             <p
               style={{
                 margin: 0,
-                fontSize: "12px",
+                fontSize: isCompactMobile ? "10px" : "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.16em",
                 color: "#8a6a42",
@@ -1281,20 +1311,20 @@ export default function Home() {
             >
               Daily Puzzle
             </p>
-            <h1 style={{ fontSize: "clamp(28px, 5vw, 42px)", marginBottom: "6px", marginTop: "6px", fontFamily: "Georgia, serif" }}>
+            <h1 style={{ fontSize: isCompactMobile ? "22px" : "clamp(28px, 5vw, 42px)", marginBottom: isCompactMobile ? "2px" : "6px", marginTop: isCompactMobile ? "2px" : "6px", fontFamily: "Georgia, serif" }}>
               Daily Word Game
             </h1>
-            <p style={{ margin: 0, fontSize: "15px", color: "#6d5537" }}>
+            <p style={{ margin: 0, fontSize: isCompactMobile ? "12px" : "15px", color: "#6d5537" }}>
               Puzzle date: <strong>{puzzle.date}</strong>
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div style={{ display: "flex", gap: isCompactMobile ? "6px" : "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button
               onClick={() => setShowStats((s) => !s)}
               style={{
-                padding: "8px 14px",
-                fontSize: "13px",
+                padding: isCompactMobile ? "6px 10px" : "8px 14px",
+                fontSize: isCompactMobile ? "11px" : "13px",
                 borderRadius: "999px",
                 border: "1px solid rgba(123, 98, 65, 0.2)",
                 backgroundColor: showStats ? "#d7c3a0" : "rgba(255,250,240,0.8)",
@@ -1343,11 +1373,11 @@ export default function Home() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: "12px",
+            gap: isCompactMobile ? "8px" : "12px",
             flexWrap: "wrap",
-            marginBottom: "16px",
-            padding: "12px 16px",
-            borderRadius: "20px",
+            marginBottom: isCompactMobile ? "8px" : "16px",
+            padding: isCompactMobile ? "8px 10px" : "12px 16px",
+            borderRadius: isCompactMobile ? "16px" : "20px",
             background: "linear-gradient(180deg, rgba(255,250,240,0.92) 0%, rgba(247,237,220,0.92) 100%)",
             border: "1px solid rgba(123, 98, 65, 0.14)",
             boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
@@ -1359,14 +1389,14 @@ export default function Home() {
                 background: "#dbe9ff",
                 color: "#26456e",
                 borderRadius: "14px",
-                padding: "10px 14px",
-                minWidth: "132px",
+                padding: isCompactMobile ? "7px 10px" : "10px 14px",
+                minWidth: isCompactMobile ? "96px" : "132px",
               }}
             >
-              <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, opacity: 0.72 }}>
+              <div style={{ fontSize: isCompactMobile ? "9px" : "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, opacity: 0.72 }}>
                 Attempts
               </div>
-              <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: 1.1 }}>
+              <div style={{ fontSize: isCompactMobile ? "22px" : "28px", fontWeight: 900, lineHeight: 1.1 }}>
                 {gameOver ? attemptHistory.length : turnNumber}/{maxAttempts}
               </div>
             </div>
@@ -1376,26 +1406,26 @@ export default function Home() {
                 background: "#fff7dc",
                 color: "#6b4f14",
                 borderRadius: "999px",
-                padding: "8px 14px",
+                padding: isCompactMobile ? "6px 10px" : "8px 14px",
                 display: "flex",
                 alignItems: "center",
-                gap: "8px",
+                gap: isCompactMobile ? "6px" : "8px",
                 fontWeight: 800,
               }}
             >
-              <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.72 }}>
+              <span style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.72 }}>
                 Optimal
               </span>
-              <span style={{ fontSize: "24px", lineHeight: 1 }}>{solution.bestScore}</span>
+              <span style={{ fontSize: isCompactMobile ? "20px" : "24px", lineHeight: 1 }}>{solution.bestScore}</span>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 800 }}>
+              <div style={{ fontSize: isCompactMobile ? "9px" : "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 800 }}>
                 Best Score
               </div>
-              <div style={{ fontSize: "24px", fontWeight: 900, color: "#2f2419" }}>{bestScore}</div>
+              <div style={{ fontSize: isCompactMobile ? "20px" : "24px", fontWeight: 900, color: "#2f2419" }}>{bestScore}</div>
             </div>
           </div>
         </div>
@@ -1516,15 +1546,15 @@ export default function Home() {
             background: "rgba(255,250,240,0.88)",
             border: "1px solid rgba(123, 98, 65, 0.14)",
             borderRadius: "16px",
-            padding: "14px 16px",
-            marginBottom: "18px",
+            padding: isCompactMobile ? "10px 12px" : "14px 16px",
+            marginBottom: isCompactMobile ? "10px" : "18px",
             boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
           }}
         >
-          <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700, marginBottom: "6px" }}>
+          <div style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700, marginBottom: isCompactMobile ? "4px" : "6px" }}>
             Current Turn
           </div>
-          <div>{message}</div>
+          <div style={{ fontSize: isCompactMobile ? "14px" : "16px", lineHeight: 1.3 }}>{message}</div>
 
           {(submittedWords.length > 0 || attemptHistory.length > 0) && (
             <div
@@ -1674,7 +1704,7 @@ export default function Home() {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: "18px",
+            gap: isCompactMobile ? "10px" : "18px",
             alignItems: "stretch",
           }}
         >
@@ -1682,12 +1712,12 @@ export default function Home() {
             style={{
               background:
                 "linear-gradient(180deg, #c79a5f 0%, #b98f58 42%, #aa804b 100%)",
-              padding: "14px",
-              borderRadius: "22px",
+              padding: isCompactMobile ? "8px" : "14px",
+              borderRadius: isCompactMobile ? "18px" : "22px",
               boxShadow: "0 16px 34px rgba(94, 66, 33, 0.18)",
               width: "100%",
               maxWidth: "100%",
-              overflowX: "auto",
+              overflowX: isCompactMobile ? "hidden" : "auto",
             }}
           >
             <div
@@ -1947,14 +1977,14 @@ export default function Home() {
                 background: "rgba(255,250,240,0.84)",
                 border: "1px solid rgba(123, 98, 65, 0.14)",
                 borderRadius: "20px",
-                padding: "16px",
+                padding: isCompactMobile ? "10px" : "16px",
                 boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
-                marginTop: "16px",
+                marginTop: isCompactMobile ? "10px" : "16px",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
-                <h2 style={{ margin: 0, fontSize: "18px" }}>Your Tiles</h2>
-                <div style={{ fontSize: "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: isCompactMobile ? "8px" : "12px" }}>
+                <h2 style={{ margin: 0, fontSize: isCompactMobile ? "16px" : "18px" }}>Your Tiles</h2>
+                <div style={{ fontSize: isCompactMobile ? "11px" : "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
               </div>
 
               <div
@@ -1988,8 +2018,8 @@ export default function Home() {
                         handleRackGapDrop(index)
                       }}
                       style={{
-                        width: "10px",
-                        minHeight: "58px",
+                        width: isCompactMobile ? "7px" : "10px",
+                        minHeight: `${rackTileSize + 2}px`,
                         backgroundColor:
                           rackDropIndex === index ? "#2563eb" : "transparent",
                         borderRadius: "999px",
@@ -2015,8 +2045,8 @@ export default function Home() {
                       onClick={() => handleTileClick(tile, index)}
                       onTouchStart={(e) => handleRackTouchStart(e, tile, index)}
                       style={{
-                        width: "56px",
-                        height: "56px",
+                        width: `${rackTileSize}px`,
+                        height: `${rackTileSize}px`,
                         border:
                           selectedTile?.index === index
                             ? "3px solid #2563eb"
@@ -2026,13 +2056,13 @@ export default function Home() {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        fontSize: "26px",
+                        fontSize: isCompactMobile ? "22px" : "26px",
                         fontWeight: "bold",
                         backgroundColor: "#e7d3a8",
                         cursor: gameOver ? "default" : "grab",
                         position: "relative",
-                        borderRadius: "12px",
-                        boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
+                        borderRadius: isCompactMobile ? "10px" : "12px",
+                        boxShadow: isCompactMobile ? "0 4px 10px rgba(0,0,0,0.1)" : "0 6px 14px rgba(0,0,0,0.12)",
                         color: "#2f2419",
                         opacity: draggedTile?.index === index ? 0.6 : 1,
                         transition: "transform 160ms ease, box-shadow 160ms ease",
@@ -2047,7 +2077,7 @@ export default function Home() {
                           position: "absolute",
                           bottom: "4px",
                           right: "6px",
-                          fontSize: "11px",
+                          fontSize: isCompactMobile ? "9px" : "11px",
                           fontWeight: "bold",
                           color: "#4b3a28",
                         }}
@@ -2071,8 +2101,8 @@ export default function Home() {
                           handleRackGapDrop(rack.length)
                         }}
                         style={{
-                          width: "10px",
-                          minHeight: "58px",
+                          width: isCompactMobile ? "7px" : "10px",
+                          minHeight: `${rackTileSize + 2}px`,
                           backgroundColor:
                             rackDropIndex === rack.length ? "#2563eb" : "transparent",
                           borderRadius: "999px",
@@ -2086,9 +2116,11 @@ export default function Home() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(80px, 0.95fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(180px, 1.4fr)",
-                  gap: "10px",
-                  marginTop: "18px",
+                  gridTemplateColumns: isCompactMobile
+                    ? "0.8fr 1fr 1fr 1.15fr"
+                    : "minmax(80px, 0.95fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(180px, 1.4fr)",
+                  gap: isCompactMobile ? "8px" : "10px",
+                  marginTop: isCompactMobile ? "12px" : "18px",
                   alignItems: "stretch",
                 }}
               >
@@ -2098,10 +2130,10 @@ export default function Home() {
                     style={{
                       width: "100%",
                       height: "100%",
-                      minHeight: "54px",
-                      padding: "10px 12px",
-                      fontSize: "14px",
-                      borderRadius: "18px",
+                      minHeight: `${actionButtonMinHeight}px`,
+                      padding: isCompactMobile ? "8px 8px" : "10px 12px",
+                      fontSize: isCompactMobile ? "12px" : "14px",
+                      borderRadius: isCompactMobile ? "16px" : "18px",
                       border: "1px solid rgba(123, 98, 65, 0.2)",
                       backgroundColor: showMoreActions ? "#d7c3a0" : "#efe2c7",
                       cursor: "pointer",
@@ -2118,7 +2150,7 @@ export default function Home() {
                         position: "absolute",
                         left: 0,
                         bottom: "calc(100% + 10px)",
-                        minWidth: "210px",
+                        minWidth: isCompactMobile ? "180px" : "210px",
                         background: "rgba(255,250,240,0.98)",
                         border: "1px solid rgba(123, 98, 65, 0.16)",
                         borderRadius: "18px",
@@ -2222,10 +2254,10 @@ export default function Home() {
                   disabled={gameOver || placedTiles.length === 0}
                   style={{
                     width: "100%",
-                    minHeight: "54px",
-                    padding: "10px 14px",
-                    fontSize: "15px",
-                    borderRadius: "18px",
+                    minHeight: `${actionButtonMinHeight}px`,
+                    padding: isCompactMobile ? "8px 8px" : "10px 14px",
+                    fontSize: isCompactMobile ? "13px" : "15px",
+                    borderRadius: isCompactMobile ? "16px" : "18px",
                     border: "1px solid rgba(123, 98, 65, 0.2)",
                     backgroundColor:
                       gameOver || placedTiles.length === 0 ? "#ddd6c8" : "#efe2c7",
@@ -2242,10 +2274,10 @@ export default function Home() {
                   disabled={gameOver}
                   style={{
                     width: "100%",
-                    minHeight: "54px",
-                    padding: "10px 14px",
-                    fontSize: "15px",
-                    borderRadius: "18px",
+                    minHeight: `${actionButtonMinHeight}px`,
+                    padding: isCompactMobile ? "8px 8px" : "10px 14px",
+                    fontSize: isCompactMobile ? "13px" : "15px",
+                    borderRadius: isCompactMobile ? "16px" : "18px",
                     border: "1px solid rgba(69,50,27,0.18)",
                     backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
                     cursor: gameOver ? "not-allowed" : "pointer",
@@ -2261,9 +2293,9 @@ export default function Home() {
                   disabled={gameOver}
                   style={{
                     width: "100%",
-                    minHeight: "54px",
-                    padding: "12px 18px",
-                    fontSize: "16px",
+                    minHeight: `${actionButtonMinHeight}px`,
+                    padding: isCompactMobile ? "10px 10px" : "12px 18px",
+                    fontSize: isCompactMobile ? "14px" : "16px",
                     borderRadius: "999px",
                     border: "1px solid rgba(34,25,13,0.12)",
                     backgroundColor: gameOver ? "#ddd6c8" : "#17120d",
