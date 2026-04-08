@@ -173,7 +173,7 @@ export default function Home() {
           const savedHintLevel = parsed.hintLevel ?? (parsed.hintUsed ? 1 : 0)
           if (savedHintLevel > 0) {
             setHintLevel(savedHintLevel)
-            setShowHint(true)
+            setShowHint(false)
           }
           setHasLoadedSave(true)
         })
