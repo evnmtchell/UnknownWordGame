@@ -57,6 +57,7 @@ type WordPreview = {
 type AttemptResult = {
   words: WordResult[]
   totalScore: number
+  placements: PlacedTile[]
 }
 
 type SavedGameState = {
@@ -194,6 +195,7 @@ export default function Home() {
   const [hintLevel, setHintLevel] = useState(0)
   const [showHint, setShowHint] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
+  const [showPuzzleReview, setShowPuzzleReview] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
   const statsUpdatedRef = useRef(false)
@@ -887,6 +889,7 @@ export default function Home() {
 
     const totalScore = wordsFormed.reduce((sum, item) => sum + item.score, 0)
     const wordResults = wordsFormed.map(({ word, score }) => ({ word, score }))
+    const placementSnapshot = placedTiles.map((tile) => ({ ...tile }))
     const solvedOptimally = totalScore >= solution.bestScore
     const solvedOptimallyOnFirstTry = attemptHistory.length === 0 && solvedOptimally
     const newAttemptsLeft = solvedOptimally ? 0 : attemptsLeft - 1
@@ -894,6 +897,7 @@ export default function Home() {
     const newAttempt = {
       words: wordResults,
       totalScore,
+      placements: placementSnapshot,
     }
 
     setSubmittedWords(wordResults)
@@ -969,6 +973,7 @@ export default function Home() {
     setHintLevel(0)
     setShowHint(false)
     setShowMoreActions(false)
+    setShowPuzzleReview(false)
     statsUpdatedRef.current = false
     triggerHapticFeedback([10, 18, 10])
     setMessage("New game started.")
@@ -1030,6 +1035,7 @@ export default function Home() {
     setHintLevel(0)
     setShowHint(false)
     setShowMoreActions(false)
+    setShowPuzzleReview(false)
     setShowArchive(false)
     statsUpdatedRef.current = false
     setMessage("Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
@@ -1194,6 +1200,13 @@ export default function Home() {
     if (score === bestScore) return "🟩"
     if (score >= Math.ceil(bestScore * 0.75)) return "🟨"
     return "⬜"
+  }
+
+  function getAttemptHighlightColor(score: number) {
+    if (bestScore === 0) return "#e7e5e4"
+    if (score === bestScore) return "#86efac"
+    if (score >= Math.ceil(bestScore * 0.75)) return "#fde68a"
+    return "#d6d3d1"
   }
 
   function isPerfectFirstTryRun() {
@@ -1766,6 +1779,21 @@ export default function Home() {
               </button>
 
               <button
+                onClick={() => setShowPuzzleReview(true)}
+                style={{
+                  padding: "11px 16px",
+                  fontSize: "15px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
+                  backgroundColor: "#eef2f9",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                View Puzzle
+              </button>
+
+              <button
                 onClick={shareResults}
                 style={{
                   padding: "11px 16px",
@@ -1784,6 +1812,255 @@ export default function Home() {
           </div>
         )}
 
+        {showPuzzleReview && (
+          <div
+            onClick={() => setShowPuzzleReview(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: isCompactMobile ? "16px" : "24px",
+              background: "rgba(34, 25, 13, 0.24)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+              zIndex: 50,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: `min(${isCompactMobile ? "calc(100vw - 20px)" : "760px"}, calc(100vw - 24px))`,
+                maxHeight: "min(84vh, 920px)",
+                overflowY: "auto",
+                padding: isCompactMobile ? "16px" : "20px",
+                background: "linear-gradient(180deg, rgba(255,250,240,0.98) 0%, rgba(247,242,234,0.98) 100%)",
+                border: "1px solid rgba(123, 98, 65, 0.14)",
+                borderRadius: isCompactMobile ? "18px" : "22px",
+                boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
+                animation: "pop-in-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "12px",
+                  marginBottom: "14px",
+                }}
+              >
+                <div>
+                  <strong style={{ fontSize: isCompactMobile ? "18px" : "20px" }}>Puzzle Review</strong>
+                  <div style={{ fontSize: "13px", color: "#6d5537", marginTop: "4px" }}>
+                    All guesses are overlaid on one board.
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPuzzleReview(false)}
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(123, 98, 65, 0.2)",
+                    backgroundColor: "#f5ead6",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gap: "16px" }}>
+                <div
+                  style={{
+                    background: "rgba(255,255,255,0.7)",
+                    border: "1px solid rgba(123, 98, 65, 0.12)",
+                    borderRadius: "18px",
+                    padding: isCompactMobile ? "12px" : "14px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px 12px",
+                      alignItems: "center",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    {attemptHistory.map((attempt, index) => (
+                      <div
+                        key={`legend-${index}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          fontSize: "13px",
+                          color: "#5b4630",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "12px",
+                            height: "12px",
+                            borderRadius: "999px",
+                            backgroundColor: getAttemptHighlightColor(attempt.totalScore),
+                            border: "1px solid rgba(93, 74, 48, 0.2)",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span>
+                          {getAttemptLabel(index, attempt.totalScore)}: {attempt.words.map((word) => word.word).join(", ")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      background: "linear-gradient(180deg, var(--board-shell-start) 0%, var(--board-shell-mid) 42%, var(--board-shell-end) 100%)",
+                      padding: isCompactMobile ? "8px" : "10px",
+                      borderRadius: "18px",
+                      boxShadow: "0 10px 20px var(--board-shell-shadow)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))`,
+                        gap: `${isCompactMobile ? 2 : 3}px`,
+                        width: "100%",
+                        maxWidth: `${boardSize * (isCompactMobile ? 32 : 40) + (boardSize - 1) * (isCompactMobile ? 2 : 3)}px`,
+                        margin: "0 auto",
+                      }}
+                    >
+                      {Array.from({ length: boardSize * boardSize }).map((_, boardIndex) => {
+                        const row = Math.floor(boardIndex / boardSize)
+                        const col = boardIndex % boardSize
+                        const fixedLetter = getFixedCellLetter(row, col)
+                        const placementsAtCell = attemptHistory.flatMap((attempt, attemptIndex) =>
+                          (attempt.placements ?? [])
+                            .filter((tile) => tile.row === row && tile.col === col)
+                            .map((tile) => ({
+                              ...tile,
+                              attemptIndex,
+                              color: getAttemptHighlightColor(attempt.totalScore),
+                            }))
+                        )
+                        const latestPlacement = placementsAtCell[placementsAtCell.length - 1]
+                        const reviewLetter = latestPlacement?.letter || fixedLetter
+                        const hasReviewLetter = Boolean(reviewLetter)
+                        const reviewBonus = getBonusAt(row, col)
+                        const overlayColors = [...new Set(placementsAtCell.map((placement) => placement.color))]
+                        const splitCount = Math.min(overlayColors.length, 3)
+                        const splitPlacements = placementsAtCell.slice(-splitCount)
+
+                        return (
+                          <div
+                            key={`review-${boardIndex}`}
+                            style={{
+                              width: "100%",
+                              aspectRatio: "1 / 1",
+                              border: "1px solid rgba(93, 74, 48, 0.45)",
+                              borderRadius: "8px",
+                              background:
+                                !latestPlacement
+                                  ? fixedLetter
+                                    ? "#e7d3a8"
+                                    : reviewBonus === "DL"
+                                    ? "#cfe8ff"
+                                    : reviewBonus === "TL"
+                                    ? "#8dc5ff"
+                                    : reviewBonus === "DW"
+                                    ? "#ffd1dc"
+                                    : reviewBonus === "TW"
+                                    ? "#ff9fb2"
+                                    : "#f7f3ea"
+                                  : overlayColors.length === 1
+                                  ? latestPlacement.color
+                                  : "#f7f3ea",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              position: "relative",
+                              color: "#2f2419",
+                              fontWeight: "bold",
+                              fontSize: isCompactMobile ? "15px" : "18px",
+                              boxShadow: latestPlacement ? "inset 0 0 0 2px rgba(255,255,255,0.38)" : "none",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {overlayColors.length > 1 && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  inset: 0,
+                                  display: "grid",
+                                  gridTemplateColumns: `repeat(${splitCount}, minmax(0, 1fr))`,
+                                }}
+                              >
+                                {splitPlacements.map((placement, colorIndex) => (
+                                  <div
+                                    key={`${placement.attemptIndex}-${colorIndex}`}
+                                    style={{
+                                      backgroundColor: placement.color,
+                                      borderLeft:
+                                        colorIndex === 0 ? "none" : "1px solid rgba(255,255,255,0.45)",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      position: "relative",
+                                      color: "#2f2419",
+                                      fontWeight: 800,
+                                      fontSize: isCompactMobile ? "11px" : "13px",
+                                    }}
+                                  >
+                                    {placement.letter}
+                                    <span
+                                      style={{
+                                        position: "absolute",
+                                        bottom: "1px",
+                                        right: "2px",
+                                        fontSize: isCompactMobile ? "5px" : "6px",
+                                        fontWeight: 700,
+                                        color: "#4b3a28",
+                                      }}
+                                    >
+                                      {placement.isBlank ? 0 : LETTER_SCORES[placement.letter] || 0}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {(overlayColors.length <= 1 ? reviewLetter || reviewBonus || "" : "")}
+                            {hasReviewLetter && overlayColors.length <= 1 && (
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  bottom: "2px",
+                                  right: "3px",
+                                  fontSize: isCompactMobile ? "7px" : "8px",
+                                  fontWeight: 700,
+                                  color: "#4b3a28",
+                                }}
+                              >
+                                {latestPlacement?.isBlank ? 0 : LETTER_SCORES[reviewLetter] || 0}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -1795,10 +2072,10 @@ export default function Home() {
           <div
             style={{
               background:
-                "linear-gradient(180deg, #c79a5f 0%, #b98f58 42%, #aa804b 100%)",
+                "linear-gradient(180deg, var(--board-shell-start) 0%, var(--board-shell-mid) 42%, var(--board-shell-end) 100%)",
               padding: isCompactMobile ? "8px" : "14px",
               borderRadius: isCompactMobile ? "18px" : "22px",
-              boxShadow: "0 16px 34px rgba(94, 66, 33, 0.18)",
+              boxShadow: "0 16px 34px var(--board-shell-shadow)",
               width: "100%",
               maxWidth: "100%",
               overflowX: isCompactMobile ? "hidden" : "auto",

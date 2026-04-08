@@ -3,6 +3,10 @@
 :root {
   --background: #f7efe1;
   --foreground: #2f2419;
+  --board-shell-start: #a7c5d8;
+  --board-shell-mid: #88aebf;
+  --board-shell-end: #6f97aa;
+  --board-shell-shadow: rgba(53, 82, 99, 0.18);
 }
 
 @theme inline {
@@ -18,6 +22,21 @@
 
 html {
   background: linear-gradient(180deg, #fbf5ea 0%, #f4e7d2 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #191714;
+    --foreground: #f4ede1;
+    --board-shell-start: #2f4352;
+    --board-shell-mid: #253847;
+    --board-shell-end: #1d2d3b;
+    --board-shell-shadow: rgba(8, 12, 18, 0.38);
+  }
+
+  html {
+    background: linear-gradient(180deg, #1f1b17 0%, #151310 100%);
+  }
 }
 
 button {
