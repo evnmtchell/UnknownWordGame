@@ -61,6 +61,7 @@ type SavedGameState = {
   submittedScore: number
   message: string
   hintUsed: boolean
+  hintLevel?: number
 }
 
 type GameStats = {
@@ -112,6 +113,10 @@ export default function Home() {
   const draggedTileRef = useRef<TileSelection>(null)
   const draggedPlacedTileRef = useRef<DraggedPlacedTile>(null)
   const completeTouchDragRef = useRef<((touch: { clientX: number; clientY: number }) => void) | null>(null)
+  const reorderRackTileRef = useRef<((fromIndex: number, targetIndex: number) => void) | null>(null)
+  const placeTileOnBoardRef = useRef<((tileData: TileSelection, row: number, col: number) => void) | null>(null)
+  const movePlacedTileOnBoardRef = useRef<((tile: DraggedPlacedTile, row: number, col: number) => void) | null>(null)
+  const returnPlacedTileToRackRef = useRef<((tile: DraggedPlacedTile) => void) | null>(null)
 
   const puzzle = useMemo(
     () => DAILY_PUZZLES.find((p) => p.date === selectedDate) || getTodayPuzzle(),
@@ -144,7 +149,7 @@ export default function Home() {
   const [attemptHistory, setAttemptHistory] = useState<AttemptResult[]>([])
   const [hasLoadedSave, setHasLoadedSave] = useState(false)
   const [rackDropIndex, setRackDropIndex] = useState<number | null>(null)
-  const [hintUsed, setHintUsed] = useState(false)
+  const [hintLevel, setHintLevel] = useState(0)
   const [showHint, setShowHint] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
@@ -165,8 +170,9 @@ export default function Home() {
           if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
           if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
           if (parsed.message) setMessage(parsed.message)
-          if (parsed.hintUsed) {
-            setHintUsed(parsed.hintUsed)
+          const savedHintLevel = parsed.hintLevel ?? (parsed.hintUsed ? 1 : 0)
+          if (savedHintLevel > 0) {
+            setHintLevel(savedHintLevel)
             setShowHint(true)
           }
           setHasLoadedSave(true)
@@ -233,7 +239,8 @@ export default function Home() {
       submittedWords,
       submittedScore,
       message,
-      hintUsed,
+      hintUsed: hintLevel > 0,
+      hintLevel,
     }
 
     localStorage.setItem(storageKey, JSON.stringify(dataToSave))
@@ -244,7 +251,7 @@ export default function Home() {
     submittedWords,
     submittedScore,
     message,
-    hintUsed,
+    hintLevel,
     storageKey,
     hasLoadedSave,
   ])
@@ -540,12 +547,18 @@ export default function Home() {
     )
     setRack((prev) => [...prev, tile.isBlank ? BLANK_TILE : tile.letter])
     draggedPlacedTileRef.current = null
-    setRack((prev) => [...prev, tile.isBlank ? BLANK_TILE : tile.letter])
     setDraggedPlacedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
     setMessage(tile.isBlank ? "Returned blank tile to the rack." : `Returned ${tile.letter} to the rack.`)
   }
+
+  useEffect(() => {
+    reorderRackTileRef.current = reorderRackTile
+    placeTileOnBoardRef.current = placeTileOnBoard
+    movePlacedTileOnBoardRef.current = movePlacedTileOnBoard
+    returnPlacedTileToRackRef.current = returnPlacedTileToRack
+  })
 
   function getMoveDirection(): "row" | "col" | null {
     if (placedTiles.length === 0) return null
@@ -830,7 +843,7 @@ export default function Home() {
     setBestScore(0)
     setAttemptHistory([])
     setRackDropIndex(null)
-    setHintUsed(false)
+    setHintLevel(0)
     setShowHint(false)
     statsUpdatedRef.current = false
     setMessage("New game started.")
@@ -889,7 +902,7 @@ export default function Home() {
     setBestScore(0)
     setAttemptHistory([])
     setRackDropIndex(null)
-    setHintUsed(false)
+    setHintLevel(0)
     setShowHint(false)
     setShowArchive(false)
     statsUpdatedRef.current = false
@@ -899,6 +912,7 @@ export default function Home() {
 
   function handleRackTouchStart(e: React.TouchEvent, tile: string, index: number) {
     if (gameOver) return
+    e.preventDefault()
     const touch = e.touches[0]
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     setTouchDrag({
@@ -922,6 +936,7 @@ export default function Home() {
     isBlank: boolean
   ) {
     if (gameOver) return
+    e.preventDefault()
     const touch = e.touches[0]
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     setTouchDrag({ type: "placed", letter, row, col, isBlank, x: touch.clientX, y: touch.clientY })
@@ -943,7 +958,12 @@ export default function Home() {
       if (drag.type === "rack") {
         setSelectedTile({ letter: drag.letter, index: drag.index, isBlank: drag.isBlank })
       } else {
-        returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
+        returnPlacedTileToRackRef.current?.({
+          row: drag.row,
+          col: drag.col,
+          letter: drag.letter,
+          isBlank: drag.isBlank,
+        })
       }
       return
     }
@@ -960,42 +980,54 @@ export default function Home() {
     if (returnEl && drag.type === "placed") {
       setDraggedTile(null)
       setDraggedPlacedTile(null)
-      returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
+      returnPlacedTileToRackRef.current?.({
+        row: drag.row,
+        col: drag.col,
+        letter: drag.letter,
+        isBlank: drag.isBlank,
+      })
     } else if (drag.type === "rack" && rackGapEl) {
-      reorderRackTile(drag.index, parseInt(rackGapEl.dataset.rackGap!, 10))
+      reorderRackTileRef.current?.(drag.index, parseInt(rackGapEl.dataset.rackGap!, 10))
     } else if (drag.type === "rack" && rackTileEl) {
-      reorderRackTile(drag.index, parseInt(rackTileEl.dataset.rackTile!, 10))
+      reorderRackTileRef.current?.(drag.index, parseInt(rackTileEl.dataset.rackTile!, 10))
     } else if (cellEl) {
       const row = parseInt(cellEl.dataset.row!)
       const col = parseInt(cellEl.dataset.col!)
       if (drag.type === "rack") {
         setDraggedTile({ letter: drag.letter, index: drag.index, isBlank: drag.isBlank })
         setDraggedPlacedTile(null)
-        placeTileOnBoard({ letter: drag.letter, index: drag.index, isBlank: drag.isBlank }, row, col)
+        placeTileOnBoardRef.current?.(
+          { letter: drag.letter, index: drag.index, isBlank: drag.isBlank },
+          row,
+          col
+        )
       } else {
         setDraggedTile(null)
         setDraggedPlacedTile({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
-        movePlacedTileOnBoard({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank }, row, col)
+        movePlacedTileOnBoardRef.current?.(
+          { row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank },
+          row,
+          col
+        )
       }
     } else if (drag.type === "placed") {
       setDraggedTile(null)
       setDraggedPlacedTile(null)
-      returnPlacedTileToRack({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
+      returnPlacedTileToRackRef.current?.({
+        row: drag.row,
+        col: drag.col,
+        letter: drag.letter,
+        isBlank: drag.isBlank,
+      })
     } else {
       setDraggedTile(null)
       setDraggedPlacedTile(null)
     }
   }
 
-  function handleTouchEnd(e: React.TouchEvent) {
-    const touch = e.changedTouches[0]
-    if (!touch) return
-    completeTouchDrag(touch)
-  }
-
   useEffect(() => {
     completeTouchDragRef.current = completeTouchDrag
-  }, [completeTouchDrag])
+  })
 
   useEffect(() => {
     function onTouchEnd(e: TouchEvent) {
@@ -1052,16 +1084,27 @@ export default function Home() {
     return `Attempt ${index + 1}`
   }
 
+  function getFirstHintLetter() {
+    return solution.bestWords[0]?.[0] ?? solution.bestPlacement[0]?.letter ?? ""
+  }
+
+  function getHintStatusText() {
+    if (hintLevel === 0) return ""
+    if (hintLevel === 1) return "Hint used"
+    return `Hint used: first letter ${getFirstHintLetter() || "unknown"}`
+  }
+
   async function shareResults() {
     const header = `Daily Word Game ${puzzle.date}`
     const summary = isPerfectFirstTryRun()
       ? `Perfect first try: ${bestScore}/${solution.bestScore}`
       : `Best Score: ${bestScore}/${solution.bestScore}`
+    const hintSummary = getHintStatusText()
     const lines = attemptHistory.map((attempt, index) => {
       const icon = getShareIcon(attempt.totalScore)
       return `${icon} ${getAttemptLabel(index, attempt.totalScore)}: ${attempt.totalScore}`
     })
-    const text = [header, summary, "", ...lines].join("\n")
+    const text = [header, summary, hintSummary, "", ...lines].filter(Boolean).join("\n")
 
     try {
       await navigator.clipboard.writeText(text)
@@ -1538,7 +1581,6 @@ export default function Home() {
                         ? (e) => handlePlacedTouchStart(e, row, col, letter, placedTile.isBlank)
                         : undefined
                     }
-                    onTouchEnd={isMovablePlacedTile ? handleTouchEnd : undefined}
                     style={{
                       width: "100%",
                       aspectRatio: "1 / 1",
@@ -1563,6 +1605,9 @@ export default function Home() {
                       boxSizing: "border-box",
                       transition: "transform 160ms ease, box-shadow 160ms ease",
                       boxShadow: hasLetter ? "0 3px 6px rgba(0,0,0,0.08)" : "none",
+                      touchAction: "none",
+                      WebkitUserSelect: "none",
+                      userSelect: "none",
                       opacity:
                         draggedPlacedTile &&
                         draggedPlacedTile.row === row &&
@@ -1639,26 +1684,39 @@ export default function Home() {
 
               <button
                 onClick={() => {
-                  if (!hintUsed) {
-                    setHintUsed(true)
+                  if (hintLevel === 0) {
+                    setHintLevel(1)
+                    setShowHint(true)
+                    setMessage("Hint used. The best placement is highlighted on the board.")
+                    return
                   }
-                  setShowHint((prev) => !prev)
+
+                  if (hintLevel === 1) {
+                    const firstLetter = getFirstHintLetter()
+                    setHintLevel(2)
+                    setShowHint(true)
+                    setMessage(
+                      firstLetter
+                        ? `Second hint: the first letter of the best word is ${firstLetter}.`
+                        : "Second hint used."
+                    )
+                  }
                 }}
-                disabled={gameOver}
-                title="Toggle the optimal placement hint"
+                disabled={gameOver || hintLevel >= 2}
+                title="First click highlights the best placement. Second click reveals the first letter."
                 style={{
                   padding: "10px 14px",
                   fontSize: "14px",
                   borderRadius: "999px",
                   border: "1px solid rgba(69,50,27,0.18)",
-                  backgroundColor: gameOver ? "#ddd6c8" : showHint ? "#d7c3a0" : "#efe2c7",
-                  cursor: gameOver ? "not-allowed" : "pointer",
+                  backgroundColor: gameOver || hintLevel >= 2 ? "#ddd6c8" : showHint ? "#d7c3a0" : "#efe2c7",
+                  cursor: gameOver || hintLevel >= 2 ? "not-allowed" : "pointer",
                   color: "#2f2419",
                   fontWeight: 700,
                   minWidth: "112px",
                 }}
               >
-                {showHint ? "Hide Hint" : "Show Hint"}
+                {hintLevel === 0 ? "Show Hint" : hintLevel === 1 ? "Reveal First Letter" : "Hint Complete"}
               </button>
             </div>
           </div>
@@ -1735,7 +1793,6 @@ export default function Home() {
                     onDragEnd={handleRackTileDragEnd}
                     onClick={() => handleTileClick(tile, index)}
                     onTouchStart={(e) => handleRackTouchStart(e, tile, index)}
-                    onTouchEnd={handleTouchEnd}
                     style={{
                       width: "56px",
                       height: "56px",
@@ -1758,6 +1815,9 @@ export default function Home() {
                       color: "#2f2419",
                       opacity: draggedTile?.index === index ? 0.6 : 1,
                       transition: "transform 160ms ease, box-shadow 160ms ease",
+                      touchAction: "none",
+                      WebkitUserSelect: "none",
+                      userSelect: "none",
                     }}
                   >
                     {tile}
