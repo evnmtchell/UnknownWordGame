@@ -857,6 +857,20 @@ export default function Home() {
       }
     }
 
+    if (wordsFormed.length === 1) {
+      const singleWord = wordsFormed[0].word
+      const wasAlreadySubmittedAsSingleWord = attemptHistory.some(
+        (attempt) => attempt.words.length === 1 && attempt.words[0]?.word === singleWord
+      )
+
+      if (wasAlreadySubmittedAsSingleWord) {
+        setMessage(
+          `${singleWord} was already submitted as its own guess. You can only reuse it as part of a cross word.`
+        )
+        return
+      }
+    }
+
     const totalScore = wordsFormed.reduce((sum, item) => sum + item.score, 0)
     const wordResults = wordsFormed.map(({ word, score }) => ({ word, score }))
     const solvedOptimally = totalScore >= solution.bestScore
@@ -1290,7 +1304,7 @@ export default function Home() {
       <div style={{ maxWidth: isCompactMobile ? "100%" : "920px", margin: "0 auto" }}>
         <div
           style={{
-            display: "flex",
+            display: isCompactMobile ? "none" : "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
             gap: isCompactMobile ? "8px" : "16px",
@@ -1376,56 +1390,98 @@ export default function Home() {
             gap: isCompactMobile ? "8px" : "12px",
             flexWrap: "wrap",
             marginBottom: isCompactMobile ? "8px" : "16px",
-            padding: isCompactMobile ? "8px 10px" : "12px 16px",
-            borderRadius: isCompactMobile ? "16px" : "20px",
-            background: "linear-gradient(180deg, rgba(255,250,240,0.92) 0%, rgba(247,237,220,0.92) 100%)",
+            padding: isCompactMobile ? "10px 10px 8px" : "12px 16px",
+            borderRadius: isCompactMobile ? "18px" : "20px",
+            background: isCompactMobile
+              ? "linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(247,242,234,0.94) 100%)"
+              : "linear-gradient(180deg, rgba(255,250,240,0.92) 0%, rgba(247,237,220,0.92) 100%)",
             border: "1px solid rgba(123, 98, 65, 0.14)",
-            boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
+            boxShadow: isCompactMobile ? "0 10px 22px rgba(78, 56, 28, 0.08)" : "0 10px 24px rgba(78, 56, 28, 0.06)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isCompactMobile ? "8px" : "10px", flexWrap: "wrap", width: isCompactMobile ? "100%" : undefined }}>
             <div
               style={{
-                background: "#dbe9ff",
-                color: "#26456e",
-                borderRadius: "14px",
-                padding: isCompactMobile ? "7px 10px" : "10px 14px",
+                background: isCompactMobile ? "#eef2f9" : "#dbe9ff",
+                color: isCompactMobile ? "#5f646e" : "#26456e",
+                borderRadius: isCompactMobile ? "14px" : "14px",
+                padding: isCompactMobile ? "10px 12px" : "10px 14px",
                 minWidth: isCompactMobile ? "96px" : "132px",
+                flex: isCompactMobile ? "1 1 0" : undefined,
               }}
             >
-              <div style={{ fontSize: isCompactMobile ? "9px" : "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, opacity: 0.72 }}>
-                Attempts
+              <div style={{ fontSize: isCompactMobile ? "11px" : "11px", textTransform: isCompactMobile ? "none" : "uppercase", letterSpacing: isCompactMobile ? "0" : "0.08em", fontWeight: 800, opacity: 0.72 }}>
+                {bestScore}
               </div>
-              <div style={{ fontSize: isCompactMobile ? "22px" : "28px", fontWeight: 900, lineHeight: 1.1 }}>
-                {gameOver ? attemptHistory.length : turnNumber}/{maxAttempts}
+              <div style={{ fontSize: isCompactMobile ? "18px" : "28px", fontWeight: 900, lineHeight: 1.1 }}>
+                {isCompactMobile ? "You" : `${gameOver ? attemptHistory.length : turnNumber}/${maxAttempts}`}
               </div>
             </div>
 
             <div
               style={{
-                background: "#fff7dc",
+                background: isCompactMobile ? "transparent" : "#fff7dc",
                 color: "#6b4f14",
                 borderRadius: "999px",
-                padding: isCompactMobile ? "6px 10px" : "8px 14px",
+                padding: isCompactMobile ? "0" : "8px 14px",
                 display: "flex",
                 alignItems: "center",
                 gap: isCompactMobile ? "6px" : "8px",
                 fontWeight: 800,
+                justifyContent: "center",
+                flex: isCompactMobile ? "0 0 auto" : undefined,
               }}
             >
-              <span style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.72 }}>
-                Optimal
-              </span>
-              <span style={{ fontSize: isCompactMobile ? "20px" : "24px", lineHeight: 1 }}>{solution.bestScore}</span>
+              {isCompactMobile ? (
+                <div
+                  style={{
+                    width: "68px",
+                    height: "68px",
+                    borderRadius: "999px",
+                    background:
+                      "conic-gradient(#6aa5ff 0deg, #6aa5ff 120deg, #f0f2f6 120deg, #f0f2f6 360deg)",
+                    display: "grid",
+                    placeItems: "center",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "50px",
+                      height: "50px",
+                      borderRadius: "999px",
+                      background: "#fffdf8",
+                      display: "grid",
+                      placeItems: "center",
+                      boxShadow: "inset 0 0 0 1px rgba(123, 98, 65, 0.08)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: "10px", color: "#8a6a42", lineHeight: 1 }}>TURN</div>
+                      <div style={{ fontSize: "20px", color: "#f2b400", fontWeight: 900, lineHeight: 1.05 }}>
+                        {gameOver ? attemptHistory.length : turnNumber}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <span style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.72 }}>
+                    Optimal
+                  </span>
+                  <span style={{ fontSize: isCompactMobile ? "20px" : "24px", lineHeight: 1 }}>{solution.bestScore}</span>
+                </>
+              )}
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end", width: isCompactMobile ? "auto" : undefined }}>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: isCompactMobile ? "9px" : "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 800 }}>
-                Best Score
+              <div style={{ fontSize: isCompactMobile ? "11px" : "11px", textTransform: isCompactMobile ? "none" : "uppercase", letterSpacing: isCompactMobile ? "0" : "0.08em", color: "#8a6a42", fontWeight: 800 }}>
+                {solution.bestScore}
               </div>
-              <div style={{ fontSize: isCompactMobile ? "20px" : "24px", fontWeight: 900, color: "#2f2419" }}>{bestScore}</div>
+              <div style={{ fontSize: isCompactMobile ? "18px" : "24px", fontWeight: 900, color: "#2f2419" }}>{isCompactMobile ? "Optimal" : bestScore}</div>
             </div>
           </div>
         </div>
@@ -1543,18 +1599,21 @@ export default function Home() {
 
         <div
           style={{
-            background: "rgba(255,250,240,0.88)",
-            border: "1px solid rgba(123, 98, 65, 0.14)",
-            borderRadius: "16px",
-            padding: isCompactMobile ? "10px 12px" : "14px 16px",
+            background: isCompactMobile ? "transparent" : "rgba(255,250,240,0.88)",
+            border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.14)",
+            borderRadius: isCompactMobile ? "0" : "16px",
+            padding: isCompactMobile ? "2px 4px 0" : "14px 16px",
             marginBottom: isCompactMobile ? "10px" : "18px",
-            boxShadow: "0 10px 24px rgba(78, 56, 28, 0.06)",
+            boxShadow: isCompactMobile ? "none" : "0 10px 24px rgba(78, 56, 28, 0.06)",
+            textAlign: isCompactMobile ? "center" : "left",
           }}
         >
-          <div style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700, marginBottom: isCompactMobile ? "4px" : "6px" }}>
-            Current Turn
-          </div>
-          <div style={{ fontSize: isCompactMobile ? "14px" : "16px", lineHeight: 1.3 }}>{message}</div>
+          {!isCompactMobile && (
+            <div style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700, marginBottom: isCompactMobile ? "4px" : "6px" }}>
+              Current Turn
+            </div>
+          )}
+          <div style={{ fontSize: isCompactMobile ? "15px" : "16px", lineHeight: 1.3, fontWeight: isCompactMobile ? 700 : 400 }}>{message}</div>
 
           {(submittedWords.length > 0 || attemptHistory.length > 0) && (
             <div
@@ -1974,26 +2033,29 @@ export default function Home() {
             <div
               style={{
                 width: "100%",
-                background: "rgba(255,250,240,0.84)",
-                border: "1px solid rgba(123, 98, 65, 0.14)",
-                borderRadius: "20px",
-                padding: isCompactMobile ? "10px" : "16px",
-                boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+                background: isCompactMobile ? "transparent" : "rgba(255,250,240,0.84)",
+                border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.14)",
+                borderRadius: isCompactMobile ? "0" : "20px",
+                padding: isCompactMobile ? "8px 0 0" : "16px",
+                boxShadow: isCompactMobile ? "none" : "0 12px 28px rgba(78, 56, 28, 0.06)",
                 marginTop: isCompactMobile ? "10px" : "16px",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: isCompactMobile ? "8px" : "12px" }}>
-                <h2 style={{ margin: 0, fontSize: isCompactMobile ? "16px" : "18px" }}>Your Tiles</h2>
-                <div style={{ fontSize: isCompactMobile ? "11px" : "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
-              </div>
+              {!isCompactMobile && (
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: isCompactMobile ? "8px" : "12px" }}>
+                  <h2 style={{ margin: 0, fontSize: isCompactMobile ? "16px" : "18px" }}>Your Tiles</h2>
+                  <div style={{ fontSize: isCompactMobile ? "11px" : "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
+                </div>
+              )}
 
               <div
                 style={{
                   display: "flex",
                   alignItems: "stretch",
-                  gap: "4px",
+                  gap: isCompactMobile ? "6px" : "4px",
                   justifyContent: "center",
-                  flexWrap: "wrap",
+                  flexWrap: isCompactMobile ? "nowrap" : "wrap",
+                  overflowX: isCompactMobile ? "visible" : "initial",
                 }}
               >
                 {rack.map((tile, index) => (
@@ -2058,12 +2120,12 @@ export default function Home() {
                         justifyContent: "center",
                         fontSize: isCompactMobile ? "22px" : "26px",
                         fontWeight: "bold",
-                        backgroundColor: "#e7d3a8",
+                        backgroundColor: isCompactMobile ? "#3f6fb3" : "#e7d3a8",
                         cursor: gameOver ? "default" : "grab",
                         position: "relative",
                         borderRadius: isCompactMobile ? "10px" : "12px",
-                        boxShadow: isCompactMobile ? "0 4px 10px rgba(0,0,0,0.1)" : "0 6px 14px rgba(0,0,0,0.12)",
-                        color: "#2f2419",
+                        boxShadow: isCompactMobile ? "0 4px 10px rgba(39,70,117,0.28)" : "0 6px 14px rgba(0,0,0,0.12)",
+                        color: isCompactMobile ? "#fffdf9" : "#2f2419",
                         opacity: draggedTile?.index === index ? 0.6 : 1,
                         transition: "transform 160ms ease, box-shadow 160ms ease",
                         touchAction: "none",
@@ -2079,7 +2141,7 @@ export default function Home() {
                           right: "6px",
                           fontSize: isCompactMobile ? "9px" : "11px",
                           fontWeight: "bold",
-                          color: "#4b3a28",
+                          color: isCompactMobile ? "#eef5ff" : "#4b3a28",
                         }}
                       >
                         {tile === BLANK_TILE ? 0 : LETTER_SCORES[tile] || 0}
@@ -2134,14 +2196,15 @@ export default function Home() {
                       padding: isCompactMobile ? "8px 8px" : "10px 12px",
                       fontSize: isCompactMobile ? "12px" : "14px",
                       borderRadius: isCompactMobile ? "16px" : "18px",
-                      border: "1px solid rgba(123, 98, 65, 0.2)",
-                      backgroundColor: showMoreActions ? "#d7c3a0" : "#efe2c7",
+                      border: "none",
+                      backgroundColor: isCompactMobile ? "transparent" : showMoreActions ? "#d7c3a0" : "#efe2c7",
                       cursor: "pointer",
-                      color: "#2f2419",
+                      color: isCompactMobile ? "#2f2419" : "#2f2419",
                       fontWeight: 800,
+                      boxShadow: isCompactMobile ? "none" : undefined,
                     }}
                   >
-                    More
+                    {isCompactMobile ? "More" : "More"}
                   </button>
 
                   {showMoreActions && (
@@ -2258,15 +2321,16 @@ export default function Home() {
                     padding: isCompactMobile ? "8px 8px" : "10px 14px",
                     fontSize: isCompactMobile ? "13px" : "15px",
                     borderRadius: isCompactMobile ? "16px" : "18px",
-                    border: "1px solid rgba(123, 98, 65, 0.2)",
+                    border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.2)",
                     backgroundColor:
-                      gameOver || placedTiles.length === 0 ? "#ddd6c8" : "#efe2c7",
+                      isCompactMobile ? "transparent" : gameOver || placedTiles.length === 0 ? "#ddd6c8" : "#efe2c7",
                     cursor: gameOver || placedTiles.length === 0 ? "not-allowed" : "pointer",
-                    color: "#2f2419",
+                    color: gameOver || placedTiles.length === 0 ? "#8b7c67" : "#2f2419",
                     fontWeight: 800,
+                    boxShadow: isCompactMobile ? "none" : undefined,
                   }}
                 >
-                  Recall
+                  {isCompactMobile ? "Swap" : "Recall"}
                 </button>
 
                 <button
@@ -2278,11 +2342,12 @@ export default function Home() {
                     padding: isCompactMobile ? "8px 8px" : "10px 14px",
                     fontSize: isCompactMobile ? "13px" : "15px",
                     borderRadius: isCompactMobile ? "16px" : "18px",
-                    border: "1px solid rgba(69,50,27,0.18)",
-                    backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
+                    border: isCompactMobile ? "none" : "1px solid rgba(69,50,27,0.18)",
+                    backgroundColor: isCompactMobile ? "transparent" : gameOver ? "#ddd6c8" : "#efe2c7",
                     cursor: gameOver ? "not-allowed" : "pointer",
-                    color: "#2f2419",
+                    color: gameOver ? "#8b7c67" : "#2f2419",
                     fontWeight: 800,
+                    boxShadow: isCompactMobile ? "none" : undefined,
                   }}
                 >
                   Shuffle
@@ -2297,15 +2362,15 @@ export default function Home() {
                     padding: isCompactMobile ? "10px 10px" : "12px 18px",
                     fontSize: isCompactMobile ? "14px" : "16px",
                     borderRadius: "999px",
-                    border: "1px solid rgba(34,25,13,0.12)",
-                    backgroundColor: gameOver ? "#ddd6c8" : "#17120d",
+                    border: isCompactMobile ? "none" : "1px solid rgba(34,25,13,0.12)",
+                    backgroundColor: isCompactMobile ? "#b9b4b0" : gameOver ? "#ddd6c8" : "#17120d",
                     cursor: gameOver ? "not-allowed" : "pointer",
-                    color: gameOver ? "#5f5448" : "#fffaf1",
+                    color: isCompactMobile ? "#fffaf1" : gameOver ? "#5f5448" : "#fffaf1",
                     fontWeight: 900,
-                    boxShadow: gameOver ? "none" : "0 10px 20px rgba(23,18,13,0.25)",
+                    boxShadow: isCompactMobile ? "none" : gameOver ? "none" : "0 10px 20px rgba(23,18,13,0.25)",
                   }}
                 >
-                  Submit Move
+                  {isCompactMobile ? "Submit" : "Submit Move"}
                 </button>
               </div>
             </div>
