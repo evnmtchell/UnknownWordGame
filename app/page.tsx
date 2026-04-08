@@ -1084,14 +1084,59 @@ export default function Home() {
     return `Attempt ${index + 1}`
   }
 
-  function getFirstHintLetter() {
-    return solution.bestWords[0]?.[0] ?? solution.bestPlacement[0]?.letter ?? ""
+  function applySecondHint() {
+    const nextHintTile = solution.bestPlacement.find(
+      (cell) => !placedTiles.some((tile) => tile.row === cell.row && tile.col === cell.col)
+    )
+
+    if (!nextHintTile) {
+      setMessage("The best placement is already fully on the board.")
+      return
+    }
+
+    if (getCellLetter(nextHintTile.row, nextHintTile.col)) {
+      setMessage("Clear your current move before using the second hint.")
+      return
+    }
+
+    if (!isPlacementAllowed(nextHintTile.row, nextHintTile.col)) {
+      setMessage("Clear your current move before using the second hint.")
+      return
+    }
+
+    const exactRackIndex = rack.findIndex((tile) => tile === nextHintTile.letter)
+    const blankRackIndex = rack.findIndex((tile) => tile === BLANK_TILE)
+
+    if (exactRackIndex === -1 && blankRackIndex === -1) {
+      setMessage("No matching tile is available in your rack for that hint.")
+      return
+    }
+
+    const rackIndex = exactRackIndex !== -1 ? exactRackIndex : blankRackIndex
+    const useBlank = rack[rackIndex] === BLANK_TILE
+
+    setPlacedTiles((prev) => [
+      ...prev,
+      {
+        row: nextHintTile.row,
+        col: nextHintTile.col,
+        letter: nextHintTile.letter,
+        isBlank: useBlank,
+      },
+    ])
+    setRack((prev) => prev.filter((_, index) => index !== rackIndex))
+    setSelectedTile(null)
+    setDraggedTile(null)
+    setDraggedPlacedTile(null)
+    setRackDropIndex(null)
+    setHintLevel(2)
+    setShowHint(true)
   }
 
   function getHintStatusText() {
     if (hintLevel === 0) return ""
     if (hintLevel === 1) return "Hint used"
-    return `Hint used: first letter ${getFirstHintLetter() || "unknown"}`
+    return "Hint used: one tile placed"
   }
 
   async function shareResults() {
@@ -1687,23 +1732,15 @@ export default function Home() {
                   if (hintLevel === 0) {
                     setHintLevel(1)
                     setShowHint(true)
-                    setMessage("Hint used. The best placement is highlighted on the board.")
                     return
                   }
 
                   if (hintLevel === 1) {
-                    const firstLetter = getFirstHintLetter()
-                    setHintLevel(2)
-                    setShowHint(true)
-                    setMessage(
-                      firstLetter
-                        ? `Second hint: the first letter of the best word is ${firstLetter}.`
-                        : "Second hint used."
-                    )
+                    applySecondHint()
                   }
                 }}
                 disabled={gameOver || hintLevel >= 2}
-                title="First click highlights the best placement. Second click reveals the first letter."
+                title="First click highlights the best placement. Second click places the next correct tile."
                 style={{
                   padding: "10px 14px",
                   fontSize: "14px",
@@ -1716,7 +1753,7 @@ export default function Home() {
                   minWidth: "112px",
                 }}
               >
-                {hintLevel === 0 ? "Show Hint" : hintLevel === 1 ? "Reveal First Letter" : "Hint Complete"}
+                {hintLevel === 0 ? "Show Hint" : hintLevel === 1 ? "Place Hint Tile" : "Hint Complete"}
               </button>
             </div>
           </div>
