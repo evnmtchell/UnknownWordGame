@@ -150,7 +150,21 @@ export default function Home() {
   const storageKey = `daily-word-game-${puzzle.date}`
   const boardGap = isCompactMobile ? 3 : 4
   const boardCellSize = isCompactMobile ? 46 : 54
-  const rackTileSize = isCompactMobile ? 46 : 56
+  const compactRackGapWidth = 2
+  const compactRackTileSize =
+    isCompactMobile && viewportSize.width > 0
+      ? Math.max(
+          34,
+          Math.min(
+            46,
+            Math.floor(
+              (viewportSize.width - 32 - (startingRack.length + 1) * compactRackGapWidth) /
+                startingRack.length
+            )
+          )
+        )
+      : 46
+  const rackTileSize = isCompactMobile ? compactRackTileSize : 56
   const actionButtonMinHeight = isCompactMobile ? 46 : 54
   const boardMaxWidth = `${boardSize * boardCellSize + (boardSize - 1) * boardGap}px`
   const boardTileFontSize = isCompactMobile ? "clamp(16px, 4.8vw, 20px)" : "clamp(18px, 5vw, 24px)"
@@ -1161,6 +1175,8 @@ export default function Home() {
   const gameOver = attemptsLeft === 0
   const canShare = attemptHistory.length > 0
   const turnNumber = Math.min(attemptHistory.length + 1, maxAttempts)
+  const completedTurns = Math.min(attemptHistory.length, maxAttempts)
+  const turnProgressDegrees = `${(completedTurns / maxAttempts) * 360}deg`
 
   function getRating() {
     if (solution.bestScore <= 0) return ""
@@ -1411,10 +1427,10 @@ export default function Home() {
               }}
             >
               <div style={{ fontSize: isCompactMobile ? "11px" : "11px", textTransform: isCompactMobile ? "none" : "uppercase", letterSpacing: isCompactMobile ? "0" : "0.08em", fontWeight: 800, opacity: 0.72 }}>
-                {bestScore}
+                {isCompactMobile ? "Score" : bestScore}
               </div>
               <div style={{ fontSize: isCompactMobile ? "18px" : "28px", fontWeight: 900, lineHeight: 1.1 }}>
-                {isCompactMobile ? "You" : `${gameOver ? attemptHistory.length : turnNumber}/${maxAttempts}`}
+                {isCompactMobile ? bestScore : `${gameOver ? attemptHistory.length : turnNumber}/${maxAttempts}`}
               </div>
             </div>
 
@@ -1439,7 +1455,7 @@ export default function Home() {
                     height: "68px",
                     borderRadius: "999px",
                     background:
-                      "conic-gradient(#6aa5ff 0deg, #6aa5ff 120deg, #f0f2f6 120deg, #f0f2f6 360deg)",
+                      `conic-gradient(#6aa5ff 0deg, #6aa5ff ${turnProgressDegrees}, #f0f2f6 ${turnProgressDegrees}, #f0f2f6 360deg)`,
                     display: "grid",
                     placeItems: "center",
                     position: "relative",
@@ -1458,9 +1474,9 @@ export default function Home() {
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: "10px", color: "#8a6a42", lineHeight: 1 }}>TURN</div>
+                      <div style={{ fontSize: "9px", color: "#8a6a42", lineHeight: 1, letterSpacing: "0.04em" }}>OPTIMAL</div>
                       <div style={{ fontSize: "20px", color: "#f2b400", fontWeight: 900, lineHeight: 1.05 }}>
-                        {gameOver ? attemptHistory.length : turnNumber}
+                        {solution.bestScore}
                       </div>
                     </div>
                   </div>
@@ -1474,9 +1490,10 @@ export default function Home() {
                 </>
               )}
             </div>
+
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end", width: isCompactMobile ? "auto" : undefined }}>
+          <div style={{ display: isCompactMobile ? "none" : "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end", width: isCompactMobile ? "auto" : undefined }}>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: isCompactMobile ? "11px" : "11px", textTransform: isCompactMobile ? "none" : "uppercase", letterSpacing: isCompactMobile ? "0" : "0.08em", color: "#8a6a42", fontWeight: 800 }}>
                 {solution.bestScore}
@@ -1614,47 +1631,40 @@ export default function Home() {
             </div>
           )}
           <div style={{ fontSize: isCompactMobile ? "15px" : "16px", lineHeight: 1.3, fontWeight: isCompactMobile ? 700 : 400 }}>{message}</div>
+          {submittedWords.length > 0 && (
+            <div
+              style={{
+                marginTop: "8px",
+                fontSize: isCompactMobile ? "14px" : "15px",
+                lineHeight: 1.35,
+                color: "#5b4630",
+                textAlign: isCompactMobile ? "center" : "left",
+              }}
+            >
+              {submittedWords.map((item) => `${item.word} - ${item.score} points`).join(", ")}
+            </div>
+          )}
 
-          {(submittedWords.length > 0 || attemptHistory.length > 0) && (
+          {attemptHistory.length > 0 && (
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "14px",
                 marginTop: "14px",
               }}
             >
-              {submittedWords.length > 0 && (
-                <div>
-                  <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", marginBottom: "6px" }}>
-                    Latest Move
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: "18px" }}>
-                    {submittedWords.map((item, index) => (
-                      <li key={index}>
-                        {item.word} - {item.score} points
-                      </li>
-                    ))}
-                  </ul>
-                  <div style={{ marginTop: "8px" }}>Total: {submittedScore}</div>
+              <div>
+                <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", marginBottom: "6px" }}>
+                  Run So Far
                 </div>
-              )}
-
-              {attemptHistory.length > 0 && (
-                <div>
-                  <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", marginBottom: "6px" }}>
-                    Run So Far
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: "18px" }}>
-                    {attemptHistory.map((attempt, index) => (
-                      <li key={index} style={{ marginBottom: "6px" }}>
-                        {getShareIcon(attempt.totalScore)} {getAttemptLabel(index, attempt.totalScore)}:{" "}
-                        {attempt.words.map((word) => word.word).join(", ")} - {attempt.totalScore}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                <ul style={{ margin: 0, paddingLeft: "18px" }}>
+                  {attemptHistory.map((attempt, index) => (
+                    <li key={index} style={{ marginBottom: "6px" }}>
+                      {getShareIcon(attempt.totalScore)} {getAttemptLabel(index, attempt.totalScore)}:{" "}
+                      {attempt.words.map((word) => word.word).join(", ")} - {attempt.totalScore}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
 
@@ -1681,16 +1691,30 @@ export default function Home() {
         {gameOver && (
           <div
             style={{
-              marginBottom: "18px",
-              padding: "20px",
-              background: "linear-gradient(180deg, #f5fbef 0%, #edf6e7 100%)",
-              border: "1px solid rgba(98, 128, 76, 0.22)",
-              borderRadius: "22px",
-              maxWidth: "620px",
-              boxShadow: "0 16px 32px rgba(84, 116, 66, 0.08)",
-              animation: "fade-up 240ms ease both",
+              position: "fixed",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: isCompactMobile ? "16px" : "24px",
+              background: "rgba(34, 25, 13, 0.18)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+              zIndex: 40,
             }}
           >
+            <div
+              style={{
+                position: "relative",
+                width: `min(${isCompactMobile ? "calc(100vw - 16px)" : "620px"}, calc(100vw - 24px))`,
+                padding: isCompactMobile ? "16px 16px 14px" : "20px",
+                background: "linear-gradient(180deg, rgba(245,251,239,0.98) 0%, rgba(237,246,231,0.98) 100%)",
+                border: "1px solid rgba(98, 128, 76, 0.22)",
+                borderRadius: isCompactMobile ? "18px" : "22px",
+                boxShadow: "0 20px 40px rgba(84, 116, 66, 0.16)",
+                animation: "pop-in-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+              }}
+            >
             <strong>{isPerfectFirstTryRun() ? "Perfect First Try" : "Results"}</strong>
             <p style={{ marginTop: "10px" }}>
               {isPerfectFirstTryRun() ? (
@@ -1756,6 +1780,7 @@ export default function Home() {
                 Share Results
               </button>
             </div>
+          </div>
           </div>
         )}
 
@@ -2052,7 +2077,7 @@ export default function Home() {
                 style={{
                   display: "flex",
                   alignItems: "stretch",
-                  gap: isCompactMobile ? "6px" : "4px",
+                  gap: isCompactMobile ? "2px" : "4px",
                   justifyContent: "center",
                   flexWrap: isCompactMobile ? "nowrap" : "wrap",
                   overflowX: isCompactMobile ? "visible" : "initial",
@@ -2080,7 +2105,7 @@ export default function Home() {
                         handleRackGapDrop(index)
                       }}
                       style={{
-                        width: isCompactMobile ? "7px" : "10px",
+                        width: isCompactMobile ? `${compactRackGapWidth}px` : "10px",
                         minHeight: `${rackTileSize + 2}px`,
                         backgroundColor:
                           rackDropIndex === index ? "#2563eb" : "transparent",
@@ -2118,7 +2143,7 @@ export default function Home() {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        fontSize: isCompactMobile ? "22px" : "26px",
+                        fontSize: isCompactMobile ? "20px" : "26px",
                         fontWeight: "bold",
                         backgroundColor: isCompactMobile ? "#3f6fb3" : "#e7d3a8",
                         cursor: gameOver ? "default" : "grab",
@@ -2137,9 +2162,9 @@ export default function Home() {
                       <span
                         style={{
                           position: "absolute",
-                          bottom: "4px",
-                          right: "6px",
-                          fontSize: isCompactMobile ? "9px" : "11px",
+                          bottom: isCompactMobile ? "3px" : "4px",
+                          right: isCompactMobile ? "4px" : "6px",
+                          fontSize: isCompactMobile ? "8px" : "11px",
                           fontWeight: "bold",
                           color: isCompactMobile ? "#eef5ff" : "#4b3a28",
                         }}
@@ -2163,7 +2188,7 @@ export default function Home() {
                           handleRackGapDrop(rack.length)
                         }}
                         style={{
-                          width: isCompactMobile ? "7px" : "10px",
+                          width: isCompactMobile ? `${compactRackGapWidth}px` : "10px",
                           minHeight: `${rackTileSize + 2}px`,
                           backgroundColor:
                             rackDropIndex === rack.length ? "#2563eb" : "transparent",
@@ -2330,7 +2355,7 @@ export default function Home() {
                     boxShadow: isCompactMobile ? "none" : undefined,
                   }}
                 >
-                  {isCompactMobile ? "Swap" : "Recall"}
+                  Recall
                 </button>
 
                 <button
@@ -2345,8 +2370,8 @@ export default function Home() {
                     border: isCompactMobile ? "none" : "1px solid rgba(69,50,27,0.18)",
                     backgroundColor: isCompactMobile ? "transparent" : gameOver ? "#ddd6c8" : "#efe2c7",
                     cursor: gameOver ? "not-allowed" : "pointer",
-                    color: gameOver ? "#8b7c67" : "#2f2419",
-                    fontWeight: 800,
+                    color: isCompactMobile ? (gameOver ? "#9d948a" : "#1f1a14") : gameOver ? "#8b7c67" : "#2f2419",
+                    fontWeight: isCompactMobile ? 900 : 800,
                     boxShadow: isCompactMobile ? "none" : undefined,
                   }}
                 >
