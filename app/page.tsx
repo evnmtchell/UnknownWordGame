@@ -48,6 +48,12 @@ type WordResult = {
   score: number
 }
 
+type WordPreview = {
+  word: string
+  score: number
+  cells: { row: number; col: number; letter: string; isBlank: boolean }[]
+}
+
 type AttemptResult = {
   words: WordResult[]
   totalScore: number
@@ -133,6 +139,11 @@ export default function Home() {
   const boardTileFontSize = "clamp(18px, 5vw, 24px)"
   const boardBonusFontSize = "clamp(8px, 2.4vw, 11px)"
   const boardScoreFontSize = "clamp(8px, 2vw, 10px)"
+  const validWordOutlineColor = "#72ad2d"
+  const validWordOutlineThickness = 6
+  const validWordOutlineInset = -4
+  const validWordOutlineBridge = boardGap / 2 + 5
+  const validWordOutlineCornerOffset = 10
 
   const [rack, setRack] = useState(startingRack)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
@@ -687,10 +698,10 @@ export default function Home() {
     return total * wordMultiplier
   }
 
-  function getAllWordsFormed() {
+  function getAllWordPreviews() {
     if (placedTiles.length === 0) return []
 
-    const results: WordResult[] = []
+    const results: WordPreview[] = []
     const seenKeys = new Set<string>()
 
     const mainDirection = getMoveDirection()
@@ -712,6 +723,7 @@ export default function Home() {
       results.push({
         word: mainWord,
         score: scoreWordFromCells(mainCells),
+        cells: mainCells,
       })
       seenKeys.add(key)
     }
@@ -729,6 +741,7 @@ export default function Home() {
           results.push({
             word: crossWord,
             score: scoreWordFromCells(crossCells),
+            cells: crossCells,
           })
           seenKeys.add(key)
         }
@@ -736,6 +749,41 @@ export default function Home() {
     }
 
     return results
+  }
+
+  function getWordOutlineStyle(row: number, col: number, previews: WordPreview[]) {
+    const highlightedCells = new Set(
+      previews.flatMap((preview) => preview.cells.map((cell) => `${cell.row}-${cell.col}`))
+    )
+
+    if (!highlightedCells.has(`${row}-${col}`)) {
+      return {
+        top: false,
+        right: false,
+        bottom: false,
+        left: false,
+        topLeftRadius: false,
+        topRightRadius: false,
+        bottomLeftRadius: false,
+        bottomRightRadius: false,
+      }
+    }
+
+    const top = !highlightedCells.has(`${row - 1}-${col}`)
+    const right = !highlightedCells.has(`${row}-${col + 1}`)
+    const bottom = !highlightedCells.has(`${row + 1}-${col}`)
+    const left = !highlightedCells.has(`${row}-${col - 1}`)
+
+    return {
+      top,
+      right,
+      bottom,
+      left,
+      topLeftRadius: top && left,
+      topRightRadius: top && right,
+      bottomLeftRadius: bottom && left,
+      bottomRightRadius: bottom && right,
+    }
   }
 
   function submitMove() {
@@ -754,7 +802,7 @@ export default function Home() {
       return
     }
 
-    const wordsFormed = getAllWordsFormed()
+    const wordsFormed = getAllWordPreviews()
 
     if (wordsFormed.length === 0) {
       setMessage("Your tiles must form a real word.")
@@ -769,16 +817,17 @@ export default function Home() {
     }
 
     const totalScore = wordsFormed.reduce((sum, item) => sum + item.score, 0)
+    const wordResults = wordsFormed.map(({ word, score }) => ({ word, score }))
     const solvedOptimallyOnFirstTry =
       attemptHistory.length === 0 && totalScore >= solution.bestScore
     const newAttemptsLeft = solvedOptimallyOnFirstTry ? 0 : attemptsLeft - 1
     const newBestScore = Math.max(bestScore, totalScore)
     const newAttempt = {
-      words: wordsFormed,
+      words: wordResults,
       totalScore,
     }
 
-    setSubmittedWords(wordsFormed)
+    setSubmittedWords(wordResults)
     setSubmittedScore(totalScore)
     setAttemptsLeft(newAttemptsLeft)
     setBestScore(newBestScore)
@@ -1158,6 +1207,8 @@ export default function Home() {
       setMessage("Could not copy results automatically.")
     }
   }
+
+  const validWordPreviews = getAllWordPreviews().filter((preview) => VALID_WORDS.has(preview.word))
 
   return (
     <main
@@ -1588,6 +1639,7 @@ export default function Home() {
                 const col = index % boardSize
                 const letter = getCellLetter(row, col)
                 const placedTile = getPlacedTile(row, col)
+                const validWordOutline = getWordOutlineStyle(row, col, validWordPreviews)
                 const optimalLetter =
                   gameOver && !letter
                     ? solution.bestPlacement.find(
@@ -1661,6 +1713,148 @@ export default function Home() {
                           : 1,
                     }}
                   >
+                    {(validWordOutline.top ||
+                      validWordOutline.right ||
+                      validWordOutline.bottom ||
+                      validWordOutline.left) && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          pointerEvents: "none",
+                          zIndex: 2,
+                        }}
+                      >
+                        {validWordOutline.top && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: `${validWordOutlineInset}px`,
+                              left: validWordOutline.left
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              right: validWordOutline.right
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              height: `${validWordOutlineThickness}px`,
+                              borderRadius: "999px",
+                              backgroundColor: validWordOutlineColor,
+                            }}
+                          />
+                        )}
+                        {validWordOutline.bottom && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              bottom: `${validWordOutlineInset}px`,
+                              left: validWordOutline.left
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              right: validWordOutline.right
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              height: `${validWordOutlineThickness}px`,
+                              borderRadius: "999px",
+                              backgroundColor: validWordOutlineColor,
+                            }}
+                          />
+                        )}
+                        {validWordOutline.left && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: `${validWordOutlineInset}px`,
+                              top: validWordOutline.top
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              bottom: validWordOutline.bottom
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              width: `${validWordOutlineThickness}px`,
+                              borderRadius: "999px",
+                              backgroundColor: validWordOutlineColor,
+                            }}
+                          />
+                        )}
+                        {validWordOutline.right && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              right: `${validWordOutlineInset}px`,
+                              top: validWordOutline.top
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              bottom: validWordOutline.bottom
+                                ? `${validWordOutlineCornerOffset}px`
+                                : `${-validWordOutlineBridge}px`,
+                              width: `${validWordOutlineThickness}px`,
+                              borderRadius: "999px",
+                              backgroundColor: validWordOutlineColor,
+                            }}
+                          />
+                        )}
+                        {validWordOutline.topLeftRadius && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: `${validWordOutlineInset}px`,
+                              top: `${validWordOutlineInset}px`,
+                              width: "16px",
+                              height: "16px",
+                              borderTop: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderLeft: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderTopLeftRadius: "16px",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                        )}
+                        {validWordOutline.topRightRadius && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              right: `${validWordOutlineInset}px`,
+                              top: `${validWordOutlineInset}px`,
+                              width: "16px",
+                              height: "16px",
+                              borderTop: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderRight: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderTopRightRadius: "16px",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                        )}
+                        {validWordOutline.bottomLeftRadius && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: `${validWordOutlineInset}px`,
+                              bottom: `${validWordOutlineInset}px`,
+                              width: "16px",
+                              height: "16px",
+                              borderBottom: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderLeft: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderBottomLeftRadius: "16px",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                        )}
+                        {validWordOutline.bottomRightRadius && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              right: `${validWordOutlineInset}px`,
+                              bottom: `${validWordOutlineInset}px`,
+                              width: "16px",
+                              height: "16px",
+                              borderBottom: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderRight: `${validWordOutlineThickness}px solid ${validWordOutlineColor}`,
+                              borderBottomRightRadius: "16px",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                        )}
+                      </div>
+                    )}
                     {displayLetter || getBonusLabel(row, col, Boolean(letter))}
                     {hasLetter && (
                       <span
