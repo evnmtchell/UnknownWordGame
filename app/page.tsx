@@ -71,6 +71,8 @@ type SavedGameState = {
   hintLevel?: number
 }
 
+type RackSlot = string | null
+
 type GameStats = {
   gamesPlayed: number
   currentStreak: number
@@ -88,8 +90,9 @@ const defaultStats: GameStats = {
 }
 
 const STATS_KEY = "daily-word-game-stats"
+const SOUND_MUTED_KEY = "daily-word-game-sound-muted"
 
-function shuffleArray(items: string[]) {
+function shuffleArray(items: RackSlot[]) {
   const copy = [...items]
   for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -117,6 +120,25 @@ function triggerHapticFeedback(pattern: number | number[] = 12) {
   navigator.vibrate(pattern)
 }
 
+function createPlacementSound(ctx: AudioContext) {
+  const now = ctx.currentTime
+  const oscillator = ctx.createOscillator()
+  const gain = ctx.createGain()
+
+  oscillator.type = "triangle"
+  oscillator.frequency.setValueAtTime(740, now)
+  oscillator.frequency.exponentialRampToValueAtTime(520, now + 0.08)
+
+  gain.gain.setValueAtTime(0.0001, now)
+  gain.gain.exponentialRampToValueAtTime(0.08, now + 0.012)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11)
+
+  oscillator.connect(gain)
+  gain.connect(ctx.destination)
+  oscillator.start(now)
+  oscillator.stop(now + 0.12)
+}
+
 export default function Home() {
   const todayDate = useMemo(() => getLocalDateString(), [])
   const [selectedDate, setSelectedDate] = useState(todayDate)
@@ -124,10 +146,12 @@ export default function Home() {
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
+  const [touchDragEngaged, setTouchDragEngaged] = useState(false)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
   const touchDragRef = useRef<TouchDragState>(null)
   const draggedTileRef = useRef<TileSelection>(null)
   const draggedPlacedTileRef = useRef<DraggedPlacedTile>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
   const completeTouchDragRef = useRef<((touch: { clientX: number; clientY: number }) => void) | null>(null)
   const reorderRackTileRef = useRef<((fromIndex: number, targetIndex: number) => void) | null>(null)
   const placeTileOnBoardRef = useRef<((tileData: TileSelection, row: number, col: number) => void) | null>(null)
@@ -176,8 +200,9 @@ export default function Home() {
   const validWordOutlineInset = -4
   const validWordOutlineBridge = boardGap / 2 + 5
   const validWordOutlineCornerOffset = isCompactMobile ? 8 : 10
+  const touchDragActivationDistance = 14
 
-  const [rack, setRack] = useState(startingRack)
+  const [rack, setRack] = useState<RackSlot[]>(startingRack)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
   const [draggedTile, setDraggedTile] = useState<TileSelection>(null)
   const [draggedPlacedTile, setDraggedPlacedTile] = useState<DraggedPlacedTile>(null)
@@ -196,12 +221,39 @@ export default function Home() {
   const [showHint, setShowHint] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
   const [showPuzzleReview, setShowPuzzleReview] = useState(false)
+  const [recentPlacementKey, setRecentPlacementKey] = useState<string | null>(null)
+  const [soundMuted, setSoundMuted] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
   const statsUpdatedRef = useRef(false)
 
   const filledCells = puzzle.filledCells
   const bonusCells = puzzle.bonusCells
+
+  function playPlacementSound() {
+    if (typeof window === "undefined") return
+    if (soundMuted) return
+
+    const AudioContextConstructor = window.AudioContext
+    if (!AudioContextConstructor) return
+
+    let audioContext = audioContextRef.current
+    if (!audioContext) {
+      audioContext = new AudioContextConstructor()
+      audioContextRef.current = audioContext
+    }
+
+    if (audioContext.state === "suspended") {
+      void audioContext.resume().then(() => {
+        createPlacementSound(audioContext!)
+      }).catch(() => {
+        // ignore blocked audio playback
+      })
+      return
+    }
+
+    createPlacementSound(audioContext)
+  }
 
   useEffect(() => {
     function updateViewportSize() {
@@ -262,7 +314,21 @@ export default function Home() {
         setShowTutorial(true)
       })
     }
+
+    try {
+      setSoundMuted(localStorage.getItem(SOUND_MUTED_KEY) === "1")
+    } catch {
+      // ignore
+    }
   }, [storageKey])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SOUND_MUTED_KEY, soundMuted ? "1" : "0")
+    } catch {
+      // ignore
+    }
+  }, [soundMuted])
 
   useEffect(() => {
     touchDragRef.current = touchDrag
@@ -277,15 +343,31 @@ export default function Home() {
   }, [draggedPlacedTile])
 
   useEffect(() => {
+    if (!recentPlacementKey) return
+    const timeoutId = window.setTimeout(() => {
+      setRecentPlacementKey(null)
+    }, 260)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [recentPlacementKey])
+
+  useEffect(() => {
     function onTouchMove(e: TouchEvent) {
       if (!touchDragRef.current) return
       e.preventDefault()
       const touch = e.touches[0]
+      const start = touchStartPosRef.current
+      if (start) {
+        const moved = Math.hypot(touch.clientX - start.x, touch.clientY - start.y)
+        if (moved >= touchDragActivationDistance) {
+          setTouchDragEngaged(true)
+        }
+      }
       setTouchDrag((prev) => (prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null))
     }
     document.addEventListener("touchmove", onTouchMove, { passive: false })
     return () => document.removeEventListener("touchmove", onTouchMove)
-  }, [])
+  }, [touchDragActivationDistance])
 
   useEffect(() => {
     if (!hasLoadedSave) return
@@ -392,7 +474,11 @@ export default function Home() {
 
   function shuffleRack() {
     if (gameOver) return
-    setRack((prev) => shuffleArray(prev))
+    setRack((prev) => {
+      const tilesOnly = shuffleArray(prev.filter((tile): tile is string => tile !== null))
+      let tileIndex = 0
+      return prev.map((slot) => (slot === null ? null : tilesOnly[tileIndex++]))
+    })
     setSelectedTile(null)
     setDraggedTile(null)
     setRackDropIndex(null)
@@ -493,12 +579,14 @@ export default function Home() {
       ...prev,
       { row, col, letter: resolvedLetter, isBlank: tileData.isBlank },
     ])
-    setRack((prev) => prev.filter((_, i) => i !== tileData.index))
+    setRecentPlacementKey(`${row}-${col}`)
+    setRack((prev) => prev.map((tile, index) => (index === tileData.index ? null : tile)))
     draggedTileRef.current = null
     setSelectedTile(null)
     setDraggedTile(null)
     setRackDropIndex(null)
     triggerHapticFeedback(tileData.isBlank ? [10, 20, 10] : 12)
+    playPlacementSound()
     setMessage(
       tileData.isBlank
         ? `Blank tile placed as ${resolvedLetter}.`
@@ -612,7 +700,15 @@ export default function Home() {
     setPlacedTiles((prev) =>
       prev.filter((placed) => !(placed.row === tile.row && placed.col === tile.col))
     )
-    setRack((prev) => [...prev, tile.isBlank ? BLANK_TILE : tile.letter])
+    setRack((prev) => {
+      const nextRack = [...prev]
+      const emptyIndex = nextRack.findIndex((slot) => slot === null)
+      if (emptyIndex !== -1) {
+        nextRack[emptyIndex] = tile.isBlank ? BLANK_TILE : tile.letter
+        return nextRack
+      }
+      return [...nextRack, tile.isBlank ? BLANK_TILE : tile.letter]
+    })
     draggedPlacedTileRef.current = null
     setDraggedPlacedTile(null)
     setSelectedTile(null)
@@ -942,7 +1038,15 @@ export default function Home() {
     if (placedTiles.length === 0) return
     const last = placedTiles[placedTiles.length - 1]
     setPlacedTiles((prev) => prev.slice(0, -1))
-    setRack((prev) => [...prev, last.isBlank ? BLANK_TILE : last.letter])
+    setRack((prev) => {
+      const nextRack = [...prev]
+      const emptyIndex = nextRack.findIndex((slot) => slot === null)
+      if (emptyIndex !== -1) {
+        nextRack[emptyIndex] = last.isBlank ? BLANK_TILE : last.letter
+        return nextRack
+      }
+      return [...nextRack, last.isBlank ? BLANK_TILE : last.letter]
+    })
     triggerHapticFeedback(8)
     setMessage(last.isBlank ? "Returned blank tile to the rack." : `Returned ${last.letter} to the rack.`)
   }
@@ -1047,6 +1151,7 @@ export default function Home() {
     e.preventDefault()
     const touch = e.touches[0]
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    setTouchDragEngaged(false)
     setTouchDrag({
       type: "rack",
       letter: tile,
@@ -1071,6 +1176,7 @@ export default function Home() {
     e.preventDefault()
     const touch = e.touches[0]
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    setTouchDragEngaged(false)
     setTouchDrag({ type: "placed", letter, row, col, isBlank, x: touch.clientX, y: touch.clientY })
     setDraggedPlacedTile({ row, col, letter, isBlank })
     setDraggedTile(null)
@@ -1082,8 +1188,9 @@ export default function Home() {
     const start = touchStartPosRef.current
     const moved = start ? Math.hypot(touch.clientX - start.x, touch.clientY - start.y) : 999
 
-    if (moved < 10) {
+    if (moved < touchDragActivationDistance) {
       setTouchDrag(null)
+      setTouchDragEngaged(false)
       touchStartPosRef.current = null
       setDraggedTile(null)
       setDraggedPlacedTile(null)
@@ -1107,6 +1214,7 @@ export default function Home() {
     const rackTileEl = el?.closest("[data-rack-tile]") as HTMLElement | null
 
     setTouchDrag(null)
+    setTouchDragEngaged(false)
     touchStartPosRef.current = null
 
     if (returnEl && drag.type === "placed") {
@@ -1265,7 +1373,7 @@ export default function Home() {
         isBlank: useBlank,
       },
     ])
-    setRack((prev) => prev.filter((_, index) => index !== rackIndex))
+    setRack((prev) => prev.map((tile, index) => (index === rackIndex ? null : tile)))
     setSelectedTile(null)
     setDraggedTile(null)
     setDraggedPlacedTile(null)
@@ -1273,6 +1381,7 @@ export default function Home() {
     setHintLevel(2)
     setShowHint(true)
     triggerHapticFeedback([10, 20, 10])
+    playPlacementSound()
   }
 
   function getHintStatusText() {
@@ -1377,21 +1486,6 @@ export default function Home() {
               }}
             >
               Stats
-            </button>
-            <button
-              onClick={() => setShowArchive((s) => !s)}
-              style={{
-                padding: "8px 14px",
-                fontSize: "13px",
-                borderRadius: "999px",
-                border: "1px solid rgba(123, 98, 65, 0.2)",
-                backgroundColor: showArchive ? "#d7c3a0" : "rgba(255,250,240,0.8)",
-                cursor: "pointer",
-                color: "#2f2419",
-                fontWeight: "bold",
-              }}
-            >
-              Archive
             </button>
             <button
               onClick={() => setShowTutorial(true)}
@@ -2111,6 +2205,7 @@ export default function Home() {
                     : LETTER_SCORES[displayLetter] || 0
                   : 0
                 const isMovablePlacedTile = Boolean(placedTile)
+                const isRecentlyPlacedTile = recentPlacementKey === `${row}-${col}` && Boolean(placedTile)
 
                 return (
                   <div
@@ -2162,6 +2257,7 @@ export default function Home() {
                       touchAction: "none",
                       WebkitUserSelect: "none",
                       userSelect: "none",
+                      animation: isRecentlyPlacedTile ? "tile-place-pop 220ms cubic-bezier(0.2, 0.8, 0.2, 1)" : undefined,
                       opacity:
                         draggedPlacedTile &&
                         draggedPlacedTile.row === row &&
@@ -2333,6 +2429,18 @@ export default function Home() {
             </div>
 
             <div
+              data-return-zone
+              onDragOver={(e) => {
+                if (draggedPlacedTileRef.current) {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = "move"
+                }
+              }}
+              onDrop={(e) => {
+                if (!draggedPlacedTileRef.current) return
+                e.preventDefault()
+                returnPlacedTileToRack(draggedPlacedTileRef.current)
+              }}
               style={{
                 width: "100%",
                 background: isCompactMobile ? "transparent" : "rgba(255,250,240,0.84)",
@@ -2362,7 +2470,7 @@ export default function Home() {
               >
                 {rack.map((tile, index) => (
                   <div
-                    key={`${tile}-${index}-wrapper`}
+                    key={`${tile ?? "empty"}-${index}-wrapper`}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -2392,7 +2500,7 @@ export default function Home() {
 
                     <div
                       data-rack-tile={index}
-                      draggable={!gameOver}
+                      draggable={!gameOver && tile !== null}
                       onDragOver={(e) => {
                         e.preventDefault()
                         if (draggedTile) setRackDropIndex(index)
@@ -2404,50 +2512,71 @@ export default function Home() {
                         e.preventDefault()
                         handleRackGapDrop(index)
                       }}
-                      onDragStart={(e) => handleTileDragStart(e, tile, index)}
+                      onDragStart={(e) => {
+                        if (!tile) return
+                        handleTileDragStart(e, tile, index)
+                      }}
                       onDragEnd={handleRackTileDragEnd}
-                      onClick={() => handleTileClick(tile, index)}
-                      onTouchStart={(e) => handleRackTouchStart(e, tile, index)}
+                      onClick={() => {
+                        if (!tile) return
+                        handleTileClick(tile, index)
+                      }}
+                      onTouchStart={(e) => {
+                        if (!tile) return
+                        handleRackTouchStart(e, tile, index)
+                      }}
                       style={{
                         width: `${rackTileSize}px`,
                         height: `${rackTileSize}px`,
-                        border:
+                        border: `3px solid ${
+                          tile === null
+                            ? "rgba(123, 98, 65, 0.2)"
+                            :
                           selectedTile?.index === index
-                            ? "3px solid #2563eb"
+                            ? "#2563eb"
                             : draggedTile?.index === index
-                            ? "3px solid #7b6241"
-                            : "2px solid #7b6241",
+                            ? "#7b6241"
+                            : "#7b6241"
+                        }`,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: isCompactMobile ? "20px" : "26px",
                         fontWeight: "bold",
-                        backgroundColor: isCompactMobile ? "#3f6fb3" : "#e7d3a8",
-                        cursor: gameOver ? "default" : "grab",
+                        backgroundColor: tile === null ? "rgba(255,250,240,0.3)" : "#e7d3a8",
+                        cursor: gameOver ? "default" : tile === null ? "default" : "grab",
                         position: "relative",
                         borderRadius: isCompactMobile ? "10px" : "12px",
-                        boxShadow: isCompactMobile ? "0 4px 10px rgba(39,70,117,0.28)" : "0 6px 14px rgba(0,0,0,0.12)",
-                        color: isCompactMobile ? "#fffdf9" : "#2f2419",
-                        opacity: draggedTile?.index === index ? 0.6 : 1,
+                        boxShadow:
+                          tile === null
+                            ? "none"
+                            : isCompactMobile
+                            ? "0 4px 10px rgba(39,70,117,0.14)"
+                            : "0 6px 14px rgba(0,0,0,0.12)",
+                        color: "#2f2419",
+                        opacity: tile === null ? 0.55 : draggedTile?.index === index ? 0.6 : 1,
                         transition: "transform 160ms ease, box-shadow 160ms ease",
+                        boxSizing: "border-box",
                         touchAction: "none",
                         WebkitUserSelect: "none",
                         userSelect: "none",
                       }}
                     >
-                      {tile}
-                      <span
-                        style={{
-                          position: "absolute",
-                          bottom: isCompactMobile ? "3px" : "4px",
-                          right: isCompactMobile ? "4px" : "6px",
-                          fontSize: isCompactMobile ? "8px" : "11px",
-                          fontWeight: "bold",
-                          color: isCompactMobile ? "#eef5ff" : "#4b3a28",
-                        }}
-                      >
-                        {tile === BLANK_TILE ? 0 : LETTER_SCORES[tile] || 0}
-                      </span>
+                      {tile ?? ""}
+                      {tile !== null && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: isCompactMobile ? "3px" : "4px",
+                            right: isCompactMobile ? "4px" : "6px",
+                            fontSize: isCompactMobile ? "8px" : "11px",
+                            fontWeight: "bold",
+                            color: "#4b3a28",
+                          }}
+                        >
+                          {tile === BLANK_TILE ? 0 : LETTER_SCORES[tile] || 0}
+                        </span>
+                      )}
                     </div>
 
                     {index === rack.length - 1 && (
@@ -2571,6 +2700,45 @@ export default function Home() {
 
                       <button
                         onClick={() => {
+                          setShowArchive((prev) => !prev)
+                          setShowMoreActions(false)
+                        }}
+                        style={{
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          borderRadius: "14px",
+                          border: "1px solid rgba(123, 98, 65, 0.2)",
+                          backgroundColor: showArchive ? "#ddd6c8" : "#efe2c7",
+                          cursor: "pointer",
+                          color: "#2f2419",
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        {showArchive ? "Hide Archive" : "Open Archive"}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setSoundMuted((prev) => !prev)
+                        }}
+                        style={{
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          borderRadius: "14px",
+                          border: "1px solid rgba(123, 98, 65, 0.2)",
+                          backgroundColor: soundMuted ? "#ddd6c8" : "#efe2c7",
+                          cursor: "pointer",
+                          color: "#2f2419",
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        {soundMuted ? "Sound Off" : "Sound On"}
+                      </button>
+
+                      <button
+                        onClick={() => {
                           resetGame()
                           setShowMoreActions(false)
                         }}
@@ -2685,7 +2853,7 @@ export default function Home() {
           style={{
             position: "fixed",
             left: touchDrag.x - 28,
-            top: touchDrag.y - 14,
+            top: touchDrag.y - 22,
             width: "56px",
             height: "56px",
             backgroundColor: "#e7d3a8",
@@ -2699,8 +2867,10 @@ export default function Home() {
             color: "#2f2419",
             pointerEvents: "none",
             zIndex: 9999,
-            opacity: 0.85,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            opacity: touchDragEngaged ? 0.92 : 0,
+            transform: touchDragEngaged ? "scale(1)" : "scale(0.92)",
+            transition: "opacity 120ms ease, transform 120ms ease",
+            boxShadow: "0 8px 18px rgba(0,0,0,0.22)",
           }}
         >
           {touchDrag.letter}

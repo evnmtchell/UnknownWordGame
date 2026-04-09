@@ -82,7 +82,142 @@ const defaultBonusCells: BonusCell[] = [
   { row: 4, col: 4, type: "TL" },
 ]
 
-export const DAILY_PUZZLES: DailyPuzzle[] = [
+const harderFutureThreeWordLayouts: PuzzleCell[][] = [
+  [
+    { row: 3, col: 0, letter: "J" },
+    { row: 3, col: 1, letter: "U" },
+    { row: 3, col: 2, letter: "M" },
+    { row: 3, col: 3, letter: "B" },
+    { row: 3, col: 4, letter: "L" },
+    { row: 3, col: 5, letter: "E" },
+    { row: 4, col: 2, letter: "O" },
+    { row: 5, col: 2, letter: "P" },
+    { row: 1, col: 4, letter: "O" },
+    { row: 2, col: 4, letter: "I" },
+  ],
+  [
+    { row: 3, col: 0, letter: "T" },
+    { row: 3, col: 1, letter: "H" },
+    { row: 3, col: 2, letter: "R" },
+    { row: 3, col: 3, letter: "I" },
+    { row: 3, col: 4, letter: "V" },
+    { row: 3, col: 5, letter: "E" },
+    { row: 4, col: 1, letter: "E" },
+    { row: 5, col: 1, letter: "N" },
+    { row: 1, col: 5, letter: "T" },
+    { row: 2, col: 5, letter: "I" },
+  ],
+  [
+    { row: 3, col: 0, letter: "C" },
+    { row: 3, col: 1, letter: "L" },
+    { row: 3, col: 2, letter: "O" },
+    { row: 3, col: 3, letter: "V" },
+    { row: 3, col: 4, letter: "E" },
+    { row: 3, col: 5, letter: "R" },
+    { row: 4, col: 2, letter: "W" },
+    { row: 5, col: 2, letter: "L" },
+    { row: 1, col: 4, letter: "B" },
+    { row: 2, col: 4, letter: "E" },
+  ],
+  [
+    { row: 3, col: 0, letter: "B" },
+    { row: 3, col: 1, letter: "R" },
+    { row: 3, col: 2, letter: "I" },
+    { row: 3, col: 3, letter: "D" },
+    { row: 3, col: 4, letter: "G" },
+    { row: 3, col: 5, letter: "E" },
+    { row: 4, col: 3, letter: "I" },
+    { row: 5, col: 3, letter: "G" },
+    { row: 1, col: 4, letter: "R" },
+    { row: 2, col: 4, letter: "A" },
+  ],
+  [
+    { row: 3, col: 0, letter: "S" },
+    { row: 3, col: 1, letter: "P" },
+    { row: 3, col: 2, letter: "R" },
+    { row: 3, col: 3, letter: "O" },
+    { row: 3, col: 4, letter: "U" },
+    { row: 3, col: 5, letter: "T" },
+    { row: 4, col: 2, letter: "I" },
+    { row: 5, col: 2, letter: "G" },
+    { row: 1, col: 5, letter: "N" },
+    { row: 2, col: 5, letter: "U" },
+  ],
+  [
+    { row: 3, col: 0, letter: "P" },
+    { row: 3, col: 1, letter: "L" },
+    { row: 3, col: 2, letter: "A" },
+    { row: 3, col: 3, letter: "N" },
+    { row: 3, col: 4, letter: "E" },
+    { row: 3, col: 5, letter: "T" },
+    { row: 4, col: 2, letter: "P" },
+    { row: 5, col: 2, letter: "E" },
+    { row: 1, col: 5, letter: "N" },
+    { row: 2, col: 5, letter: "E" },
+  ],
+  [
+    { row: 3, col: 0, letter: "S" },
+    { row: 3, col: 1, letter: "H" },
+    { row: 3, col: 2, letter: "A" },
+    { row: 3, col: 3, letter: "D" },
+    { row: 3, col: 4, letter: "O" },
+    { row: 3, col: 5, letter: "W" },
+    { row: 4, col: 1, letter: "E" },
+    { row: 5, col: 1, letter: "N" },
+    { row: 1, col: 5, letter: "R" },
+    { row: 2, col: 5, letter: "O" },
+  ],
+  [
+    { row: 3, col: 0, letter: "G" },
+    { row: 3, col: 1, letter: "A" },
+    { row: 3, col: 2, letter: "R" },
+    { row: 3, col: 3, letter: "D" },
+    { row: 3, col: 4, letter: "E" },
+    { row: 3, col: 5, letter: "N" },
+    { row: 4, col: 1, letter: "R" },
+    { row: 5, col: 1, letter: "C" },
+    { row: 1, col: 5, letter: "D" },
+    { row: 2, col: 5, letter: "E" },
+  ],
+  [
+    { row: 3, col: 0, letter: "M" },
+    { row: 3, col: 1, letter: "A" },
+    { row: 3, col: 2, letter: "R" },
+    { row: 3, col: 3, letter: "K" },
+    { row: 3, col: 4, letter: "E" },
+    { row: 3, col: 5, letter: "T" },
+    { row: 4, col: 1, letter: "R" },
+    { row: 5, col: 1, letter: "C" },
+    { row: 1, col: 5, letter: "N" },
+    { row: 2, col: 5, letter: "E" },
+  ],
+  [
+    { row: 3, col: 0, letter: "P" },
+    { row: 3, col: 1, letter: "O" },
+    { row: 3, col: 2, letter: "C" },
+    { row: 3, col: 3, letter: "K" },
+    { row: 3, col: 4, letter: "E" },
+    { row: 3, col: 5, letter: "T" },
+    { row: 4, col: 1, letter: "A" },
+    { row: 5, col: 1, letter: "R" },
+    { row: 1, col: 5, letter: "A" },
+    { row: 2, col: 5, letter: "N" },
+  ],
+  [
+    { row: 3, col: 0, letter: "F" },
+    { row: 3, col: 1, letter: "I" },
+    { row: 3, col: 2, letter: "G" },
+    { row: 3, col: 3, letter: "U" },
+    { row: 3, col: 4, letter: "R" },
+    { row: 3, col: 5, letter: "E" },
+    { row: 4, col: 1, letter: "C" },
+    { row: 5, col: 1, letter: "E" },
+    { row: 1, col: 5, letter: "R" },
+    { row: 2, col: 5, letter: "U" },
+  ],
+]
+
+const baseDailyPuzzles: DailyPuzzle[] = [
   {
     id: "puzzle-1",
     date: "2026-04-03",
@@ -163,28 +298,7 @@ export const DAILY_PUZZLES: DailyPuzzle[] = [
     optimalScore: 0,
     optimalWords: [],
   },
-  {
-    id: "puzzle-6",
-    date: "2026-04-08",
-    boardSize: 7,
-    rack: ["S", "E", "R", "T", "I", "N", "G"],
-    filledCells: [
-      { row: 3, col: 0, letter: "F" },
-      { row: 3, col: 1, letter: "I" },
-      { row: 3, col: 2, letter: "Z" },
-      { row: 3, col: 3, letter: "Z" },
-      { row: 3, col: 4, letter: "L" },
-      { row: 3, col: 5, letter: "E" },
-      { row: 4, col: 2, letter: "O" },
-      { row: 5, col: 2, letter: "O" },
-      { row: 0, col: 5, letter: "F" },
-      { row: 1, col: 5, letter: "R" },
-      { row: 2, col: 5, letter: "E" },
-    ],
-    bonusCells: defaultBonusCells,
-    optimalScore: 0,
-    optimalWords: [],
-  },
+
   {
     id: "puzzle-7",
     date: "2026-04-09",
@@ -654,7 +768,7 @@ export const DAILY_PUZZLES: DailyPuzzle[] = [
   {
     // Full cross: STOP (horizontal) and ROAD (vertical) share the O
     id: "puzzle-36",
-    date: "2026-05-08",
+    date: "2026-04-08",
     boardSize: 7,
     rack: ["?", "A", "N", "I", "L", "G", "S"],
     filledCells: [
@@ -672,6 +786,22 @@ export const DAILY_PUZZLES: DailyPuzzle[] = [
     optimalWords: [],
   },
 ]
+
+export const DAILY_PUZZLES: DailyPuzzle[] = baseDailyPuzzles.map((puzzle, index) => {
+  if (puzzle.date === "2026-04-08") {
+    return puzzle
+  }
+
+  const replacementIndex =
+    puzzle.date < "2026-04-08"
+      ? index
+      : index - baseDailyPuzzles.findIndex((item) => item.date === "2026-04-09")
+
+  return {
+    ...puzzle,
+    filledCells: harderFutureThreeWordLayouts[replacementIndex % harderFutureThreeWordLayouts.length],
+  }
+})
 
 for (const puzzle of DAILY_PUZZLES) {
   validatePuzzleLayout(puzzle)
