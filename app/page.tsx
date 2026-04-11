@@ -51,6 +51,7 @@ type WordResult = {
 type WordPreview = {
   word: string
   score: number
+  direction: "row" | "col"
   cells: { row: number; col: number; letter: string; isBlank: boolean }[]
 }
 
@@ -876,6 +877,7 @@ export default function Home() {
       results.push({
         word: mainWord,
         score: scoreWordFromCells(mainCells),
+        direction: mainDirection,
         cells: mainCells,
       })
       seenKeys.add(key)
@@ -894,6 +896,7 @@ export default function Home() {
           results.push({
             word: crossWord,
             score: scoreWordFromCells(crossCells),
+            direction: crossDirection,
             cells: crossCells,
           })
           seenKeys.add(key)
@@ -1423,7 +1426,25 @@ export default function Home() {
     }
   }
 
-  const validWordPreviews = getAllWordPreviews().filter((preview) => VALID_WORDS.has(preview.word))
+  const allWordPreviews = getAllWordPreviews()
+  const validWordPreviews = allWordPreviews.filter((preview) => VALID_WORDS.has(preview.word))
+  const showLiveScorePreview =
+    placedTiles.length > 0 &&
+    isTouchingFilledCells() &&
+    allWordPreviews.length > 0 &&
+    validWordPreviews.length === allWordPreviews.length
+  const liveScoreAnchorCell = showLiveScorePreview
+    ? (() => {
+        const mainPreview = allWordPreviews[0]
+        if (!mainPreview) return null
+        return mainPreview.direction === "row"
+          ? mainPreview.cells.reduce((best, cell) => (cell.col > best.col ? cell : best))
+          : mainPreview.cells.reduce((best, cell) => (cell.row > best.row ? cell : best))
+      })()
+    : null
+  const liveScoreTotal = showLiveScorePreview
+    ? allWordPreviews.reduce((sum, preview) => sum + preview.score, 0)
+    : null
 
   return (
     <main
@@ -2206,6 +2227,8 @@ export default function Home() {
                   : 0
                 const isMovablePlacedTile = Boolean(placedTile)
                 const isRecentlyPlacedTile = recentPlacementKey === `${row}-${col}` && Boolean(placedTile)
+                const isLiveScoreAnchor =
+                  liveScoreAnchorCell?.row === row && liveScoreAnchorCell?.col === col
 
                 return (
                   <div
@@ -2422,6 +2445,32 @@ export default function Home() {
                       >
                         {letterScore}
                       </span>
+                    )}
+                    {isLiveScoreAnchor && liveScoreTotal !== null && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          right: isCompactMobile ? "-8px" : "-10px",
+                          bottom: isCompactMobile ? "-10px" : "-12px",
+                          minWidth: isCompactMobile ? "26px" : "30px",
+                          height: isCompactMobile ? "26px" : "30px",
+                          padding: "0 7px",
+                          borderRadius: "999px",
+                          background:
+                            "linear-gradient(180deg, rgba(125,197,42,0.98) 0%, rgba(89,161,23,0.98) 100%)",
+                          color: "#fffdf8",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: isCompactMobile ? "13px" : "14px",
+                          fontWeight: 900,
+                          boxShadow: "0 8px 16px rgba(71, 117, 20, 0.28)",
+                          border: "2px solid rgba(255,255,255,0.72)",
+                          zIndex: 4,
+                        }}
+                      >
+                        {liveScoreTotal}
+                      </div>
                     )}
                   </div>
                 )
