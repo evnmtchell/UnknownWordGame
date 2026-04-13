@@ -146,6 +146,7 @@ export default function Home() {
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
+  const [viewMode, setViewMode] = useState<"home" | "game">("home")
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
   const [touchDragEngaged, setTouchDragEngaged] = useState(false)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
@@ -224,6 +225,7 @@ export default function Home() {
   const [showPuzzleReview, setShowPuzzleReview] = useState(false)
   const [recentPlacementKey, setRecentPlacementKey] = useState<string | null>(null)
   const [soundMuted, setSoundMuted] = useState(false)
+  const [hasSavedTodayGame, setHasSavedTodayGame] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
   const statsUpdatedRef = useRef(false)
@@ -321,7 +323,13 @@ export default function Home() {
     } catch {
       // ignore
     }
-  }, [storageKey])
+
+    try {
+      setHasSavedTodayGame(Boolean(localStorage.getItem(`daily-word-game-${todayDate}`)))
+    } catch {
+      // ignore
+    }
+  }, [storageKey, todayDate])
 
   useEffect(() => {
     try {
@@ -330,6 +338,23 @@ export default function Home() {
       // ignore
     }
   }, [soundMuted])
+
+  useEffect(() => {
+    try {
+      setHasSavedTodayGame(Boolean(localStorage.getItem(`daily-word-game-${todayDate}`)))
+    } catch {
+      // ignore
+    }
+  }, [
+    todayDate,
+    attemptsLeft,
+    bestScore,
+    attemptHistory,
+    submittedWords,
+    submittedScore,
+    hintLevel,
+    hasLoadedSave,
+  ])
 
   useEffect(() => {
     touchDragRef.current = touchDrag
@@ -1127,6 +1152,7 @@ export default function Home() {
 
   function selectPuzzleDate(date: string) {
     const newPuzzle = DAILY_PUZZLES.find((p) => p.date === date) || getTodayPuzzle()
+    setViewMode("game")
     setSelectedDate(date)
     setRack(newPuzzle.rack)
     setPlacedTiles([])
@@ -1147,6 +1173,14 @@ export default function Home() {
     statsUpdatedRef.current = false
     setMessage("Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
     setHasLoadedSave(false)
+  }
+
+  function goHome() {
+    setViewMode("home")
+    setShowArchive(false)
+    setShowStats(false)
+    setShowMoreActions(false)
+    setShowPuzzleReview(false)
   }
 
   function handleRackTouchStart(e: React.TouchEvent, tile: string, index: number) {
@@ -1445,6 +1479,127 @@ export default function Home() {
   const liveScoreTotal = showLiveScorePreview
     ? allWordPreviews.reduce((sum, preview) => sum + preview.score, 0)
     : null
+  const homeActionButtonStyle: React.CSSProperties = {
+    padding: isCompactMobile ? "14px 16px" : "16px 18px",
+    fontSize: isCompactMobile ? "15px" : "16px",
+    borderRadius: "18px",
+    border: "1px solid rgba(123, 98, 65, 0.16)",
+    background: "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
+    color: "#2f2419",
+    cursor: "pointer",
+    fontWeight: 800,
+    textAlign: "left",
+    boxShadow: "0 10px 24px rgba(78, 56, 28, 0.08)",
+  }
+  const statsPanel = showStats && (
+    <div
+      style={{
+        background: "rgba(255,250,240,0.88)",
+        border: "1px solid rgba(123, 98, 65, 0.14)",
+        borderRadius: "18px",
+        padding: "16px 20px",
+        marginBottom: "16px",
+        maxWidth: "700px",
+        boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+        animation: "fade-up 220ms ease both",
+      }}
+    >
+      <strong style={{ fontSize: "18px" }}>Your Stats</strong>
+      <div style={{ display: "flex", gap: "24px", marginTop: "12px", flexWrap: "wrap" }}>
+        {[
+          { label: "Played", value: stats.gamesPlayed },
+          { label: "Streak", value: stats.currentStreak },
+          { label: "Best Streak", value: stats.maxStreak },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
+            <div style={{ fontSize: "12px", color: "#5b4630" }}>{label}</div>
+          </div>
+        ))}
+      </div>
+      {stats.gamesPlayed > 0 && (
+        <div style={{ marginTop: "16px" }}>
+          <div style={{ fontWeight: "bold", marginBottom: "8px", fontSize: "13px" }}>
+            Score Distribution
+          </div>
+          {(["Perfect", "Excellent", "Great", "Solid", "Keep trying"] as const).map(
+            (rating) => {
+              const count = stats.ratingCounts[rating] ?? 0
+              const pct = Math.round((count / stats.gamesPlayed) * 100)
+              return (
+                <div
+                  key={rating}
+                  style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}
+                >
+                  <span style={{ width: "80px", fontSize: "12px", flexShrink: 0 }}>{rating}</span>
+                  <div
+                    style={{
+                      height: "18px",
+                      width: `${Math.max(pct, count > 0 ? 6 : 0)}%`,
+                      backgroundColor: "#b98f58",
+                      borderRadius: "3px",
+                      minWidth: count > 0 ? "24px" : "0",
+                      transition: "width 0.3s",
+                    }}
+                  />
+                  <span style={{ fontSize: "12px" }}>{count}</span>
+                </div>
+              )
+            }
+          )}
+        </div>
+      )}
+    </div>
+  )
+  const archivePanel = showArchive && (
+    <div
+      style={{
+        background: "rgba(255,250,240,0.88)",
+        border: "1px solid rgba(123, 98, 65, 0.14)",
+        borderRadius: "18px",
+        padding: "16px 20px",
+        marginBottom: "16px",
+        maxWidth: "700px",
+        boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+        animation: "fade-up 220ms ease both",
+      }}
+    >
+      <strong style={{ fontSize: "16px" }}>Puzzle Archive</strong>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px",
+          marginTop: "12px",
+          maxHeight: viewMode === "home" ? "280px" : "180px",
+          overflowY: "auto",
+          paddingRight: "4px",
+        }}
+      >
+        {DAILY_PUZZLES.filter((p) => p.date <= todayDate)
+          .slice()
+          .reverse()
+          .map((p) => (
+            <button
+              key={p.date}
+              onClick={() => selectPuzzleDate(p.date)}
+              style={{
+                padding: "7px 12px",
+                fontSize: "13px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.2)",
+                backgroundColor: p.date === selectedDate && viewMode === "game" ? "#b98f58" : "#efe2c7",
+                color: p.date === selectedDate && viewMode === "game" ? "#fff" : "#2f2419",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              {p.date === todayDate ? `${p.date} (Today)` : p.date}
+            </button>
+          ))}
+      </div>
+    </div>
+  )
 
   return (
     <main
@@ -1461,6 +1616,186 @@ export default function Home() {
       }}
     >
       <div style={{ maxWidth: isCompactMobile ? "100%" : "920px", margin: "0 auto" }}>
+        {viewMode === "home" ? (
+          <div
+            style={{
+              minHeight: isCompactMobile ? "calc(100dvh - 16px)" : "calc(100dvh - 48px)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              gap: isCompactMobile ? "18px" : "22px",
+              maxWidth: "760px",
+              margin: "0 auto",
+            }}
+          >
+            <div
+              style={{
+                padding: isCompactMobile ? "20px 18px" : "28px 28px 24px",
+                borderRadius: isCompactMobile ? "24px" : "28px",
+                background:
+                  "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
+                border: "1px solid rgba(123, 98, 65, 0.14)",
+                boxShadow: "0 18px 36px rgba(78, 56, 28, 0.08)",
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: isCompactMobile ? "11px" : "12px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.18em",
+                  color: "#8a6a42",
+                  fontWeight: 800,
+                }}
+              >
+                Daily Puzzle
+              </p>
+              <h1
+                style={{
+                  margin: isCompactMobile ? "8px 0 6px" : "10px 0 8px",
+                  fontSize: isCompactMobile ? "34px" : "clamp(42px, 7vw, 64px)",
+                  lineHeight: 0.98,
+                  fontFamily: "Georgia, serif",
+                }}
+              >
+                Daily Word
+                <br />
+                Game
+              </h1>
+              <p style={{ margin: 0, fontSize: isCompactMobile ? "15px" : "17px", color: "#5b4630", maxWidth: "40ch", lineHeight: 1.45 }}>
+                Build the best move from a fixed starting board. You get three tries to chase the optimal score.
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                  marginTop: isCompactMobile ? "16px" : "18px",
+                  fontSize: "13px",
+                  color: "#6d5537",
+                }}
+              >
+                <span>Today: {todayDate}</span>
+                <span>Best possible: {solution.bestScore}</span>
+                <span>{hasSavedTodayGame ? "Saved run available" : "Fresh board ready"}</span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isCompactMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                gap: "12px",
+              }}
+            >
+              <button
+                onClick={() => selectPuzzleDate(todayDate)}
+                style={{
+                  ...homeActionButtonStyle,
+                  background: "linear-gradient(180deg, rgba(45,34,23,0.98) 0%, rgba(23,18,13,0.98) 100%)",
+                  color: "#fffaf1",
+                }}
+              >
+                <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
+                  {hasSavedTodayGame ? "Continue" : "Start"}
+                </div>
+                <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
+                  {hasSavedTodayGame ? "Today’s Puzzle" : "Play Today"}
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowArchive((prev) => !prev)
+                  setShowStats(false)
+                }}
+                style={homeActionButtonStyle}
+              >
+                <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
+                  Browse
+                </div>
+                <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
+                  {showArchive ? "Hide Archive" : "Open Archive"}
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowStats((prev) => !prev)
+                  setShowArchive(false)
+                }}
+                style={homeActionButtonStyle}
+              >
+                <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
+                  Progress
+                </div>
+                <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
+                  {showStats ? "Hide Stats" : "View Stats"}
+                </div>
+              </button>
+
+              <button
+                onClick={() => setShowTutorial(true)}
+                style={homeActionButtonStyle}
+              >
+                <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
+                  Learn
+                </div>
+                <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
+                  How to Play
+                </div>
+              </button>
+            </div>
+
+            {statsPanel}
+            {archivePanel}
+          </div>
+        ) : (
+          <>
+        {isCompactMobile && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "8px",
+            }}
+          >
+            <button
+              onClick={goHome}
+              style={{
+                padding: "8px 14px",
+                fontSize: "13px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.18)",
+                backgroundColor: "rgba(255,250,240,0.92)",
+                cursor: "pointer",
+                color: "#2f2419",
+                fontWeight: 800,
+                boxShadow: "0 8px 18px rgba(78, 56, 28, 0.06)",
+              }}
+            >
+              Home
+            </button>
+            <button
+              onClick={() => setShowTutorial(true)}
+              style={{
+                padding: "8px 14px",
+                fontSize: "13px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.18)",
+                backgroundColor: "rgba(255,250,240,0.92)",
+                cursor: "pointer",
+                color: "#2f2419",
+                fontWeight: 800,
+                boxShadow: "0 8px 18px rgba(78, 56, 28, 0.06)",
+              }}
+            >
+              How to Play
+            </button>
+          </div>
+        )}
         <div
           style={{
             display: isCompactMobile ? "none" : "flex",
@@ -1507,6 +1842,21 @@ export default function Home() {
               }}
             >
               Stats
+            </button>
+            <button
+              onClick={goHome}
+              style={{
+                padding: "8px 14px",
+                fontSize: "13px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.2)",
+                backgroundColor: "rgba(255,250,240,0.8)",
+                cursor: "pointer",
+                color: "#2f2419",
+                fontWeight: "bold",
+              }}
+            >
+              Home
             </button>
             <button
               onClick={() => setShowTutorial(true)}
@@ -1630,117 +1980,8 @@ export default function Home() {
             </div>
           </div>
         </div>
-
-        {showStats && (
-          <div
-            style={{
-              background: "rgba(255,250,240,0.88)",
-              border: "1px solid rgba(123, 98, 65, 0.14)",
-              borderRadius: "18px",
-              padding: "16px 20px",
-              marginBottom: "16px",
-              maxWidth: "560px",
-              boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
-              animation: "fade-up 220ms ease both",
-            }}
-          >
-            <strong style={{ fontSize: "18px" }}>Your Stats</strong>
-            <div style={{ display: "flex", gap: "24px", marginTop: "12px", flexWrap: "wrap" }}>
-              {[
-                { label: "Played", value: stats.gamesPlayed },
-                { label: "Streak", value: stats.currentStreak },
-                { label: "Best Streak", value: stats.maxStreak },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
-                  <div style={{ fontSize: "12px", color: "#5b4630" }}>{label}</div>
-                </div>
-              ))}
-            </div>
-            {stats.gamesPlayed > 0 && (
-              <div style={{ marginTop: "16px" }}>
-                <div style={{ fontWeight: "bold", marginBottom: "8px", fontSize: "13px" }}>
-                  Score Distribution
-                </div>
-                {(["Perfect", "Excellent", "Great", "Solid", "Keep trying"] as const).map(
-                  (rating) => {
-                    const count = stats.ratingCounts[rating] ?? 0
-                    const pct = Math.round((count / stats.gamesPlayed) * 100)
-                    return (
-                      <div
-                        key={rating}
-                        style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}
-                      >
-                        <span style={{ width: "80px", fontSize: "12px", flexShrink: 0 }}>{rating}</span>
-                        <div
-                          style={{
-                            height: "18px",
-                            width: `${Math.max(pct, count > 0 ? 6 : 0)}%`,
-                            backgroundColor: "#b98f58",
-                            borderRadius: "3px",
-                            minWidth: count > 0 ? "24px" : "0",
-                            transition: "width 0.3s",
-                          }}
-                        />
-                        <span style={{ fontSize: "12px" }}>{count}</span>
-                      </div>
-                    )
-                  }
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {showArchive && (
-          <div
-            style={{
-              background: "rgba(255,250,240,0.88)",
-              border: "1px solid rgba(123, 98, 65, 0.14)",
-              borderRadius: "18px",
-              padding: "16px 20px",
-              marginBottom: "16px",
-              maxWidth: "700px",
-              boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
-              animation: "fade-up 220ms ease both",
-            }}
-          >
-            <strong style={{ fontSize: "16px" }}>Puzzle Archive</strong>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "8px",
-                marginTop: "12px",
-                maxHeight: "180px",
-                overflowY: "auto",
-                paddingRight: "4px",
-              }}
-            >
-              {DAILY_PUZZLES.filter((p) => p.date <= todayDate)
-                .slice()
-                .reverse()
-                .map((p) => (
-                  <button
-                    key={p.date}
-                    onClick={() => selectPuzzleDate(p.date)}
-                    style={{
-                      padding: "7px 12px",
-                      fontSize: "13px",
-                      borderRadius: "999px",
-                      border: "1px solid rgba(123, 98, 65, 0.2)",
-                      backgroundColor: p.date === selectedDate ? "#b98f58" : "#efe2c7",
-                      color: p.date === selectedDate ? "#fff" : "#2f2419",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {p.date === todayDate ? `${p.date} (Today)` : p.date}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
+        {statsPanel}
+        {archivePanel}
 
         <div
           style={{
@@ -1876,8 +2117,23 @@ export default function Home() {
                 gap: "12px",
                 flexWrap: "wrap",
                 marginTop: "10px",
-              }}
-            >
+                }}
+              >
+              <button
+                onClick={goHome}
+                style={{
+                  padding: "11px 16px",
+                  fontSize: "15px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
+                  backgroundColor: "#fff7dc",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                Home
+              </button>
+
               <button
                 onClick={resetGame}
                 style={{
@@ -2769,6 +3025,25 @@ export default function Home() {
 
                       <button
                         onClick={() => {
+                          goHome()
+                        }}
+                        style={{
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          borderRadius: "14px",
+                          border: "1px solid rgba(123, 98, 65, 0.2)",
+                          backgroundColor: "#efe2c7",
+                          cursor: "pointer",
+                          color: "#2f2419",
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        Home
+                      </button>
+
+                      <button
+                        onClick={() => {
                           setSoundMuted((prev) => !prev)
                         }}
                         style={{
@@ -2895,6 +3170,8 @@ export default function Home() {
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {touchDrag && (
