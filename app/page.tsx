@@ -228,6 +228,15 @@ export default function Home() {
   const rackTileSize = isCompactMobile ? compactRackTileSize : 56
   const actionButtonMinHeight = isCompactMobile ? 46 : 54
   const boardMaxWidth = `${boardSize * boardCellSize + (boardSize - 1) * boardGap}px`
+  const compactViewportWidth = Math.max(0, viewportSize.width - 16)
+  const compactViewportHeightBudget = Math.max(
+    0,
+    viewportSize.height - (selectedMode === "hard" ? 318 : 286)
+  )
+  const compactPuzzleFrameWidth =
+    isCompactMobile && compactViewportWidth > 0
+      ? Math.max(260, Math.min(compactViewportWidth, compactViewportHeightBudget || compactViewportWidth))
+      : null
   const boardTileFontSize = isCompactMobile ? "clamp(16px, 4.8vw, 20px)" : "clamp(18px, 5vw, 24px)"
   const boardBonusFontSize = isCompactMobile ? "clamp(7px, 2vw, 9px)" : "clamp(8px, 2.4vw, 11px)"
   const boardScoreFontSize = isCompactMobile ? "clamp(7px, 1.8vw, 9px)" : "clamp(8px, 2vw, 10px)"
@@ -242,6 +251,7 @@ export default function Home() {
   const [homeBrandRack, setHomeBrandRack] = useState<string[]>(HOME_BRAND_TILES)
   const [homeBrandDraggedIndex, setHomeBrandDraggedIndex] = useState<number | null>(null)
   const [homeBrandDropIndex, setHomeBrandDropIndex] = useState<number | null>(null)
+  const homeBrandTouchStartRef = useRef<{ x: number; y: number } | null>(null)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
   const [draggedTile, setDraggedTile] = useState<TileSelection>(null)
   const [draggedPlacedTile, setDraggedPlacedTile] = useState<DraggedPlacedTile>(null)
@@ -260,6 +270,7 @@ export default function Home() {
   const [showHint, setShowHint] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
   const [showPuzzleReview, setShowPuzzleReview] = useState(false)
+  const [showResultsModal, setShowResultsModal] = useState(false)
   const [recentPlacementKey, setRecentPlacementKey] = useState<string | null>(null)
   const [soundMuted, setSoundMuted] = useState(false)
   const [hasSavedTodayGame, setHasSavedTodayGame] = useState(false)
@@ -618,6 +629,14 @@ export default function Home() {
     setHomeBrandRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
     setHomeBrandDraggedIndex(null)
     setHomeBrandDropIndex(null)
+  }
+
+  function handleHomeBrandTouchStart(e: React.TouchEvent, index: number) {
+    const touch = e.touches[0]
+    if (!touch) return
+    homeBrandTouchStartRef.current = { x: touch.clientX, y: touch.clientY }
+    setHomeBrandDraggedIndex(index)
+    setHomeBrandDropIndex(index)
   }
 
   function handleRackGapDrop(targetIndex: number) {
@@ -1431,11 +1450,61 @@ export default function Home() {
     }
   }, [])
 
+  useEffect(() => {
+    if (homeBrandDraggedIndex === null) return
+
+    function onTouchMove(e: TouchEvent) {
+      const touch = e.touches[0]
+      if (!touch) return
+      const el = document.elementFromPoint(touch.clientX, touch.clientY)
+      const tileEl = el?.closest("[data-home-brand-index]") as HTMLElement | null
+      if (!tileEl?.dataset.homeBrandIndex) return
+      setHomeBrandDropIndex(parseInt(tileEl.dataset.homeBrandIndex, 10))
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      const touch = e.changedTouches[0]
+      const start = homeBrandTouchStartRef.current
+      const moved = start ? Math.hypot(touch.clientX - start.x, touch.clientY - start.y) : 0
+      const dropIndex = homeBrandDropIndex
+      const dragIndex = homeBrandDraggedIndex
+
+      homeBrandTouchStartRef.current = null
+
+      if (dragIndex !== null && dropIndex !== null && moved >= touchDragActivationDistance) {
+        reorderHomeBrandTile(dragIndex, dropIndex)
+        return
+      }
+
+      setHomeBrandDraggedIndex(null)
+      setHomeBrandDropIndex(null)
+    }
+
+    document.addEventListener("touchmove", onTouchMove, { passive: true })
+    document.addEventListener("touchend", onTouchEnd)
+    document.addEventListener("touchcancel", onTouchEnd)
+
+    return () => {
+      document.removeEventListener("touchmove", onTouchMove)
+      document.removeEventListener("touchend", onTouchEnd)
+      document.removeEventListener("touchcancel", onTouchEnd)
+    }
+  }, [homeBrandDraggedIndex, homeBrandDropIndex, touchDragActivationDistance])
+
   const gameOver = attemptsLeft === 0
   const canShare = attemptHistory.length > 0
   const turnNumber = Math.min(attemptHistory.length + 1, maxAttempts)
   const completedTurns = Math.min(attemptHistory.length, maxAttempts)
   const turnProgressDegrees = `${(completedTurns / maxAttempts) * 360}deg`
+
+  useEffect(() => {
+    if (gameOver) {
+      setShowResultsModal(true)
+    } else {
+      setShowResultsModal(false)
+      setShowPuzzleReview(false)
+    }
+  }, [gameOver])
 
   function getRating() {
     if (solution.bestScore <= 0) return ""
@@ -1609,13 +1678,13 @@ export default function Home() {
   const statsPanel = showStats && (
     <div
       style={{
-        background: "rgba(255,250,240,0.88)",
-        border: "1px solid rgba(123, 98, 65, 0.14)",
-        borderRadius: "18px",
-        padding: "16px 20px",
+        width: "100%",
+        background: homeActionButtonStyle.background,
+        border: homeActionButtonStyle.border,
+        borderRadius: homeActionButtonStyle.borderRadius,
+        padding: isCompactMobile ? "14px 16px" : "16px 18px",
         marginBottom: "16px",
-        maxWidth: "700px",
-        boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+        boxShadow: homeActionButtonStyle.boxShadow,
         animation: "fade-up 220ms ease both",
       }}
     >
@@ -1701,13 +1770,13 @@ export default function Home() {
   const archivePanel = showArchive && (
     <div
       style={{
-        background: "rgba(255,250,240,0.88)",
-        border: "1px solid rgba(123, 98, 65, 0.14)",
-        borderRadius: "18px",
-        padding: "16px 20px",
+        width: "100%",
+        background: homeActionButtonStyle.background,
+        border: homeActionButtonStyle.border,
+        borderRadius: homeActionButtonStyle.borderRadius,
+        padding: isCompactMobile ? "14px 16px" : "16px 18px",
         marginBottom: "16px",
-        maxWidth: "700px",
-        boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+        boxShadow: homeActionButtonStyle.boxShadow,
         animation: "fade-up 220ms ease both",
       }}
     >
@@ -1790,21 +1859,18 @@ export default function Home() {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-          gap: "8px",
-          maxHeight: viewMode === "home" ? "280px" : "180px",
-          overflowY: "auto",
-          paddingRight: "4px",
+          gap: isCompactMobile ? "5px" : "6px",
         }}
       >
-        {["S", "M", "T", "W", "T", "F", "S"].map((day) => (
+        {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
           <div
-            key={day}
+            key={`${day}-${index}`}
             style={{
               textAlign: "center",
-              fontSize: "12px",
+              fontSize: isCompactMobile ? "10px" : "11px",
               fontWeight: 800,
               color: "#8a6a42",
-              paddingBottom: "4px",
+              paddingBottom: isCompactMobile ? "2px" : "3px",
             }}
           >
             {day}
@@ -1817,7 +1883,7 @@ export default function Home() {
                 key={`empty-${index}`}
                 style={{
                   aspectRatio: "1 / 1",
-                  borderRadius: "12px",
+                  borderRadius: isCompactMobile ? "9px" : "10px",
                   backgroundColor: "rgba(203, 190, 170, 0.22)",
                 }}
               />
@@ -1835,12 +1901,12 @@ export default function Home() {
                 key={cell.date}
                 style={{
                   aspectRatio: "1 / 1",
-                  borderRadius: "12px",
+                  borderRadius: isCompactMobile ? "9px" : "10px",
                   backgroundColor: "rgba(203, 190, 170, 0.22)",
                   color: "#9d8b71",
                   display: "grid",
                   placeItems: "center",
-                  fontSize: "13px",
+                  fontSize: isCompactMobile ? "11px" : "12px",
                   fontWeight: 700,
                 }}
               >
@@ -1855,7 +1921,7 @@ export default function Home() {
               onClick={() => selectPuzzleDate(cell.date!)}
               style={{
                 aspectRatio: "1 / 1",
-                borderRadius: "12px",
+                borderRadius: isCompactMobile ? "9px" : "10px",
                 border: isSelected
                   ? "2px solid #5f4221"
                   : isToday
@@ -1865,7 +1931,7 @@ export default function Home() {
                 color: isCompleted ? "#fffaf1" : "#2f2419",
                 cursor: "pointer",
                 fontWeight: 800,
-                fontSize: "14px",
+                fontSize: isCompactMobile ? "11px" : "12px",
                 display: "grid",
                 placeItems: "center",
                 boxShadow: isCompleted ? "0 8px 16px rgba(114, 173, 45, 0.18)" : "none",
@@ -1883,6 +1949,7 @@ export default function Home() {
     <main
       style={{
         minHeight: "100dvh",
+        height: isCompactMobile ? "100dvh" : undefined,
         background:
           "linear-gradient(180deg, rgba(251,245,234,0.96) 0%, rgba(242,230,210,0.96) 100%)",
         padding: isCompactMobile
@@ -1891,9 +1958,16 @@ export default function Home() {
         fontFamily: "var(--font-sans)",
         color: "#2f2419",
         animation: "fade-up 300ms ease both",
+        overflow: isCompactMobile ? "hidden" : undefined,
       }}
     >
-      <div style={{ maxWidth: isCompactMobile ? "100%" : "920px", margin: "0 auto" }}>
+      <div
+        style={{
+          maxWidth: isCompactMobile ? "100%" : "920px",
+          margin: "0 auto",
+          height: isCompactMobile ? "100%" : undefined,
+        }}
+      >
         {viewMode === "home" ? (
           <div
             style={{
@@ -1958,6 +2032,7 @@ export default function Home() {
                 {homeBrandRack.map((letter, index) => (
                   <div
                     key={`${letter}-${index}`}
+                    data-home-brand-index={index}
                     onDragOver={(e) => {
                       e.preventDefault()
                       setHomeBrandDropIndex(index)
@@ -1980,6 +2055,7 @@ export default function Home() {
                         setHomeBrandDraggedIndex(null)
                         setHomeBrandDropIndex(null)
                       }}
+                      onTouchStart={(e) => handleHomeBrandTouchStart(e, index)}
                       style={{
                         width: isCompactMobile ? "40px" : "56px",
                         height: isCompactMobile ? "40px" : "56px",
@@ -2157,7 +2233,15 @@ export default function Home() {
             {archivePanel}
           </div>
         ) : (
-          <>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              height: isCompactMobile ? "100%" : undefined,
+              minHeight: 0,
+              overflow: isCompactMobile ? "hidden" : undefined,
+            }}
+          >
         {isCompactMobile && (
           <div
             style={{
@@ -2217,85 +2301,77 @@ export default function Home() {
             </button>
           </div>
         )}
-        <div
-          style={{
-            display: isCompactMobile ? "none" : "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: isCompactMobile ? "8px" : "16px",
-            flexWrap: "wrap",
-            marginBottom: isCompactMobile ? "8px" : "16px",
-          }}
-        >
-          <div>
-            <p
+        {!isCompactMobile && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+              flexWrap: "wrap",
+              marginBottom: "12px",
+            }}
+          >
+            <div
               style={{
-                margin: 0,
-                fontSize: isCompactMobile ? "10px" : "12px",
-                textTransform: "uppercase",
-                letterSpacing: "0.16em",
-                color: "#8a6a42",
-                fontWeight: 800,
+                fontSize: "14px",
+                color: "#6d5537",
+                fontWeight: 700,
               }}
             >
-              Daily Puzzle
-            </p>
-            <h1 style={{ fontSize: isCompactMobile ? "22px" : "clamp(28px, 5vw, 42px)", marginBottom: isCompactMobile ? "2px" : "6px", marginTop: isCompactMobile ? "2px" : "6px", fontFamily: "Georgia, serif" }}>
-              Lexicon
-            </h1>
-            <p style={{ margin: 0, fontSize: isCompactMobile ? "12px" : "15px", color: "#6d5537" }}>
-              Puzzle date: <strong>{formatDisplayDate(puzzle.date)}</strong> · <strong style={{ textTransform: "capitalize" }}>{selectedMode}</strong> mode
-            </p>
-          </div>
+              <strong>{formatDisplayDate(puzzle.date)}</strong> ·{" "}
+              <strong style={{ textTransform: "capitalize" }}>{selectedMode}</strong> mode
+            </div>
 
-          <div style={{ display: "flex", gap: isCompactMobile ? "6px" : "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button
-              onClick={() => setShowStats((s) => !s)}
-              style={{
-                padding: isCompactMobile ? "6px 10px" : "8px 14px",
-                fontSize: isCompactMobile ? "11px" : "13px",
-                borderRadius: "999px",
-                border: "1px solid rgba(123, 98, 65, 0.2)",
-                backgroundColor: showStats ? "#d7c3a0" : "rgba(255,250,240,0.8)",
-                cursor: "pointer",
-                color: "#2f2419",
-                fontWeight: "bold",
-              }}
-            >
-              Stats
-            </button>
-            <button
-              onClick={goHome}
-              style={{
-                padding: "8px 14px",
-                fontSize: "13px",
-                borderRadius: "999px",
-                border: "1px solid rgba(123, 98, 65, 0.2)",
-                backgroundColor: "rgba(255,250,240,0.8)",
-                cursor: "pointer",
-                color: "#2f2419",
-                fontWeight: "bold",
-              }}
-            >
-              Home
-            </button>
-            <button
-              onClick={() => setShowTutorial(true)}
-              style={{
-                padding: "8px 14px",
-                fontSize: "13px",
-                borderRadius: "999px",
-                border: "1px solid rgba(123, 98, 65, 0.2)",
-                backgroundColor: "rgba(255,250,240,0.8)",
-                cursor: "pointer",
-                color: "#2f2419",
-                fontWeight: "bold",
-              }}
-            >
-              How to Play
-            </button>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowStats((s) => !s)}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: "13px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
+                  backgroundColor: showStats ? "#d7c3a0" : "rgba(255,250,240,0.8)",
+                  cursor: "pointer",
+                  color: "#2f2419",
+                  fontWeight: "bold",
+                }}
+              >
+                Stats
+              </button>
+              <button
+                onClick={goHome}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: "13px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
+                  backgroundColor: "rgba(255,250,240,0.8)",
+                  cursor: "pointer",
+                  color: "#2f2419",
+                  fontWeight: "bold",
+                }}
+              >
+                Home
+              </button>
+              <button
+                onClick={() => setShowTutorial(true)}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: "13px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
+                  backgroundColor: "rgba(255,250,240,0.8)",
+                  cursor: "pointer",
+                  color: "#2f2419",
+                  fontWeight: "bold",
+                }}
+              >
+                How to Play
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div
           style={{
@@ -2312,6 +2388,10 @@ export default function Home() {
               : "linear-gradient(180deg, rgba(255,250,240,0.92) 0%, rgba(247,237,220,0.92) 100%)",
             border: "1px solid rgba(123, 98, 65, 0.14)",
             boxShadow: isCompactMobile ? "0 10px 22px rgba(78, 56, 28, 0.08)" : "0 10px 24px rgba(78, 56, 28, 0.06)",
+            width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
+            maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
+            marginLeft: isCompactMobile ? "auto" : undefined,
+            marginRight: isCompactMobile ? "auto" : undefined,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: isCompactMobile ? "8px" : "10px", flexWrap: "wrap", width: isCompactMobile ? "100%" : undefined }}>
@@ -2413,6 +2493,11 @@ export default function Home() {
             marginBottom: isCompactMobile ? "10px" : "18px",
             boxShadow: isCompactMobile ? "none" : "0 10px 24px rgba(78, 56, 28, 0.06)",
             textAlign: isCompactMobile ? "center" : "left",
+            flexShrink: 0,
+            width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
+            maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
+            marginLeft: isCompactMobile ? "auto" : undefined,
+            marginRight: isCompactMobile ? "auto" : undefined,
           }}
         >
           {!isCompactMobile && (
@@ -2429,13 +2514,17 @@ export default function Home() {
                 lineHeight: 1.35,
                 color: "#5b4630",
                 textAlign: isCompactMobile ? "center" : "left",
+                display: isCompactMobile ? "-webkit-box" : undefined,
+                WebkitLineClamp: isCompactMobile ? 1 : undefined,
+                WebkitBoxOrient: isCompactMobile ? "vertical" : undefined,
+                overflow: isCompactMobile ? "hidden" : undefined,
               }}
             >
               {submittedWords.map((item) => `${item.word} - ${item.score} points`).join(", ")}
             </div>
           )}
 
-          {attemptHistory.length > 0 && (
+          {!isCompactMobile && attemptHistory.length > 0 && (
             <div
               style={{
                 display: "grid",
@@ -2458,7 +2547,7 @@ export default function Home() {
             </div>
           )}
 
-          {canShare && (
+          {!isCompactMobile && canShare && (
             <button
               onClick={shareResults}
               style={{
@@ -2478,8 +2567,9 @@ export default function Home() {
           )}
         </div>
 
-        {gameOver && (
+        {gameOver && showResultsModal && (
           <div
+            onClick={() => setShowResultsModal(false)}
             style={{
               position: "fixed",
               inset: 0,
@@ -2494,6 +2584,7 @@ export default function Home() {
             }}
           >
             <div
+              onClick={(e) => e.stopPropagation()}
               style={{
                 position: "relative",
                 width: `min(${isCompactMobile ? "calc(100vw - 16px)" : "620px"}, calc(100vw - 24px))`,
@@ -2505,6 +2596,27 @@ export default function Home() {
                 animation: "pop-in-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
               }}
             >
+            <button
+              onClick={() => setShowResultsModal(false)}
+              style={{
+                position: "absolute",
+                top: isCompactMobile ? "10px" : "12px",
+                right: isCompactMobile ? "10px" : "12px",
+                width: "34px",
+                height: "34px",
+                borderRadius: "999px",
+                border: "1px solid rgba(98, 128, 76, 0.2)",
+                backgroundColor: "rgba(255,255,255,0.72)",
+                cursor: "pointer",
+                fontSize: "18px",
+                lineHeight: 1,
+                fontWeight: 700,
+                color: "#355126",
+              }}
+              aria-label="Close results"
+            >
+              ×
+            </button>
             <strong>{isPerfectFirstTryRun() ? "Perfect First Try" : "Results"}</strong>
             <p style={{ marginTop: "10px" }}>
               {isPerfectFirstTryRun() ? (
@@ -2583,6 +2695,21 @@ export default function Home() {
                 }}
               >
                 View Puzzle
+              </button>
+
+              <button
+                onClick={() => setShowResultsModal(false)}
+                style={{
+                  padding: "11px 16px",
+                  fontSize: "15px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(123, 98, 65, 0.2)",
+                  backgroundColor: "#eef4e8",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                Close
               </button>
 
               <button
@@ -2859,6 +2986,8 @@ export default function Home() {
             flexDirection: "column",
             gap: isCompactMobile ? "10px" : "18px",
             alignItems: "stretch",
+            flex: isCompactMobile ? 1 : undefined,
+            minHeight: 0,
           }}
         >
           <div
@@ -2868,9 +2997,10 @@ export default function Home() {
               padding: isCompactMobile ? "8px" : "14px",
               borderRadius: isCompactMobile ? "18px" : "22px",
               boxShadow: "0 16px 34px var(--board-shell-shadow)",
-              width: "100%",
-              maxWidth: "100%",
+              width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
+              maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
               overflowX: isCompactMobile ? "hidden" : "auto",
+              margin: isCompactMobile ? "0 auto" : undefined,
             }}
           >
             <div
@@ -3384,7 +3514,7 @@ export default function Home() {
                       <button
                         onClick={() => {
                           handleHintClick()
-                          if (hintLevel >= 1) setShowMoreActions(false)
+                          setShowMoreActions(false)
                         }}
                         disabled={gameOver || hintLevel >= 2}
                         title="First click highlights the best placement. Second click places the next correct tile."
@@ -3422,45 +3552,6 @@ export default function Home() {
                         }}
                       >
                         Clear Move
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setShowArchive((prev) => !prev)
-                          setShowMoreActions(false)
-                        }}
-                        style={{
-                          padding: "10px 12px",
-                          fontSize: "14px",
-                          borderRadius: "14px",
-                          border: "1px solid rgba(123, 98, 65, 0.2)",
-                          backgroundColor: showArchive ? "#ddd6c8" : "#efe2c7",
-                          cursor: "pointer",
-                          color: "#2f2419",
-                          fontWeight: 700,
-                          textAlign: "left",
-                        }}
-                      >
-                        {showArchive ? "Hide Archive" : "Open Archive"}
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          goHome()
-                        }}
-                        style={{
-                          padding: "10px 12px",
-                          fontSize: "14px",
-                          borderRadius: "14px",
-                          border: "1px solid rgba(123, 98, 65, 0.2)",
-                          backgroundColor: "#efe2c7",
-                          cursor: "pointer",
-                          color: "#2f2419",
-                          fontWeight: 700,
-                          textAlign: "left",
-                        }}
-                      >
-                        Home
                       </button>
 
                       <button
@@ -3540,7 +3631,7 @@ export default function Home() {
                     backgroundColor:
                       isCompactMobile ? "transparent" : gameOver || placedTiles.length === 0 ? "#ddd6c8" : "#efe2c7",
                     cursor: gameOver || placedTiles.length === 0 ? "not-allowed" : "pointer",
-                    color: gameOver || placedTiles.length === 0 ? "#8b7c67" : "#2f2419",
+                    color: "#2f2419",
                     fontWeight: 800,
                     boxShadow: isCompactMobile ? "none" : undefined,
                   }}
@@ -3591,7 +3682,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-        </>
+        </div>
         )}
       </div>
 
