@@ -177,8 +177,7 @@ export default function Home() {
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
-  const [showDailyModePicker, setShowDailyModePicker] = useState(false)
-  const [viewMode, setViewMode] = useState<"home" | "game">("home")
+  const [viewMode, setViewMode] = useState<"home" | "daily" | "game">("home")
   const [archiveMonthKey, setArchiveMonthKey] = useState(() => getMonthKey(todayDate))
   const [completedArchiveDates, setCompletedArchiveDates] = useState<Record<string, boolean>>({})
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
@@ -1277,7 +1276,6 @@ export default function Home() {
   function selectPuzzleDate(date: string, mode: "easy" | "hard" = selectedMode) {
     const newPuzzle = getPuzzleByDate(date, mode)
     setSelectedMode(mode)
-    setShowDailyModePicker(false)
     setViewMode("game")
     setSelectedDate(date)
     setRack(newPuzzle.rack)
@@ -1307,7 +1305,6 @@ export default function Home() {
     setShowStats(false)
     setShowMoreActions(false)
     setShowPuzzleReview(false)
-    setShowDailyModePicker(false)
   }
 
   function handleRackTouchStart(e: React.TouchEvent, tile: string, index: number) {
@@ -2110,7 +2107,7 @@ export default function Home() {
                 ))}
               </div>
               <p style={{ margin: 0, fontSize: isCompactMobile ? "15px" : "17px", color: "#5b4630", maxWidth: "40ch", lineHeight: 1.45 }}>
-                Build the best move from a fixed starting board. You get three tries to chase the optimal score.
+                A lexicon is the vocabulary of a language, speaker, or subject.
               </p>
             </div>
 
@@ -2122,7 +2119,11 @@ export default function Home() {
               }}
             >
               <button
-                onClick={() => setShowDailyModePicker((prev) => !prev)}
+                onClick={() => {
+                  setViewMode("daily")
+                  setShowArchive(false)
+                  setShowStats(false)
+                }}
                 style={{
                   ...homeActionButtonStyle,
                   background: "linear-gradient(180deg, rgba(45,34,23,0.98) 0%, rgba(23,18,13,0.98) 100%)",
@@ -2166,71 +2167,223 @@ export default function Home() {
                   {showStats ? "Hide Stats" : "View Stats"}
                 </div>
               </button>
-
-              <button
-                onClick={() => setShowTutorial(true)}
-                style={homeActionButtonStyle}
-              >
-                <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
-                  Learn
-                </div>
-                <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  How to Play
-                </div>
-              </button>
             </div>
-
-            {showDailyModePicker && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isCompactMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-                  gap: "12px",
-                  padding: isCompactMobile ? "14px" : "16px",
-                  borderRadius: "20px",
-                  background: "rgba(255,250,240,0.92)",
-                  border: "1px solid rgba(123, 98, 65, 0.14)",
-                  boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
-                }}
-              >
-                <button
-                  onClick={() => selectPuzzleDate(todayDate, "easy")}
-                  style={homeActionButtonStyle}
-                >
-                  <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
-                    Daily Mode
-                  </div>
-                  <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                    Easy
-                  </div>
-                  <div style={{ marginTop: "6px", fontSize: "13px", color: "#6d5537", lineHeight: 1.35 }}>
-                    The standard daily board.
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => selectPuzzleDate(todayDate, "hard")}
-                  style={{
-                    ...homeActionButtonStyle,
-                    background: "linear-gradient(180deg, rgba(90,58,20,0.96) 0%, rgba(62,38,10,0.98) 100%)",
-                    color: "#fffaf1",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.72 }}>
-                    Daily Mode
-                  </div>
-                  <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                    Hard
-                  </div>
-                  <div style={{ marginTop: "6px", fontSize: "13px", color: "rgba(255,250,241,0.82)", lineHeight: 1.35 }}>
-                    The tougher daily track.
-                  </div>
-                </button>
-              </div>
-            )}
 
             {statsPanel}
             {archivePanel}
+
+            <button
+              onClick={() => setShowTutorial(true)}
+              aria-label="How to Play"
+              style={{
+                position: "fixed",
+                right: isCompactMobile ? "14px" : "22px",
+                bottom: isCompactMobile ? "max(14px, calc(env(safe-area-inset-bottom) + 8px))" : "22px",
+                width: isCompactMobile ? "46px" : "52px",
+                height: isCompactMobile ? "46px" : "52px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.22)",
+                background: "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
+                color: "#2f2419",
+                cursor: "pointer",
+                fontSize: isCompactMobile ? "22px" : "24px",
+                fontWeight: 800,
+                boxShadow: "0 12px 28px rgba(78, 56, 28, 0.12)",
+                display: "grid",
+                placeItems: "center",
+                zIndex: 15,
+              }}
+            >
+              ?
+            </button>
+          </div>
+        ) : viewMode === "daily" ? (
+          <div
+            style={{
+              minHeight: isCompactMobile ? "calc(100dvh - 16px)" : "calc(100dvh - 48px)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: isCompactMobile ? "18px" : "22px",
+              maxWidth: "560px",
+              margin: "0 auto",
+              textAlign: "center",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={goHome}
+              aria-label="Back"
+              style={{
+                position: "absolute",
+                top: isCompactMobile ? "4px" : "0",
+                left: isCompactMobile ? "0" : "4px",
+                width: isCompactMobile ? "42px" : "46px",
+                height: isCompactMobile ? "42px" : "46px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.16)",
+                background: "rgba(255,250,240,0.86)",
+                color: "#2f2419",
+                cursor: "pointer",
+                fontSize: isCompactMobile ? "26px" : "28px",
+                lineHeight: 1,
+                display: "grid",
+                placeItems: "center",
+                boxShadow: "0 10px 22px rgba(78, 56, 28, 0.08)",
+              }}
+            >
+              ‹
+            </button>
+
+            <div
+              style={{
+                width: "100%",
+                padding: isCompactMobile ? "28px 20px 24px" : "36px 28px 30px",
+              }}
+            >
+              <div
+                style={{
+                  width: isCompactMobile ? "72px" : "84px",
+                  height: isCompactMobile ? "72px" : "84px",
+                  margin: "0 auto 14px",
+                  borderRadius: "20px",
+                  background: "rgba(255,255,255,0.28)",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: isCompactMobile ? "34px" : "40px",
+                }}
+              >
+                ◈
+              </div>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: isCompactMobile ? "42px" : "50px",
+                  lineHeight: 1,
+                  fontFamily: "Georgia, serif",
+                }}
+              >
+                Lexicon
+              </h1>
+              <p
+                style={{
+                  margin: "10px auto 0",
+                  maxWidth: "12ch",
+                  fontSize: isCompactMobile ? "17px" : "20px",
+                  lineHeight: 1.25,
+                  color: "#3d2a38",
+                  fontWeight: 500,
+                }}
+              >
+                Choose your daily mode.
+              </p>
+
+              <div
+                style={{
+                  marginTop: isCompactMobile ? "24px" : "28px",
+                  background: "rgba(129, 83, 128, 0.16)",
+                  borderRadius: "14px",
+                  padding: "4px",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: "4px",
+                  maxWidth: "320px",
+                  marginInline: "auto",
+                }}
+              >
+                {(["easy", "hard"] as const).map((mode) => {
+                  const isSelected = selectedMode === mode
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setSelectedMode(mode)}
+                      style={{
+                        padding: isCompactMobile ? "10px 12px" : "11px 14px",
+                        borderRadius: "10px",
+                        border: "none",
+                        background: isSelected ? "#fffaf1" : "transparent",
+                        color: isSelected ? "#2f2419" : "#3d2a38",
+                        cursor: "pointer",
+                        fontSize: isCompactMobile ? "15px" : "16px",
+                        fontWeight: 800,
+                        textTransform: "capitalize",
+                        boxShadow: isSelected ? "0 4px 10px rgba(61, 42, 56, 0.08)" : "none",
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <button
+                onClick={() => selectPuzzleDate(todayDate, selectedMode)}
+                style={{
+                  marginTop: isCompactMobile ? "18px" : "20px",
+                  minWidth: isCompactMobile ? "140px" : "160px",
+                  padding: isCompactMobile ? "14px 24px" : "16px 28px",
+                  borderRadius: "999px",
+                  border: "none",
+                  background: "#17120d",
+                  color: "#fffaf1",
+                  cursor: "pointer",
+                  fontSize: isCompactMobile ? "24px" : "26px",
+                  fontWeight: 800,
+                  boxShadow: "0 12px 24px rgba(23,18,13,0.2)",
+                }}
+              >
+                Play
+              </button>
+
+              <div
+                style={{
+                  marginTop: isCompactMobile ? "18px" : "22px",
+                  fontSize: isCompactMobile ? "16px" : "18px",
+                  color: "#2f2419",
+                  fontWeight: 700,
+                }}
+              >
+                {todayDisplayDate}
+              </div>
+              <div
+                style={{
+                  marginTop: "8px",
+                  fontSize: isCompactMobile ? "14px" : "15px",
+                  lineHeight: 1.45,
+                  color: "#4f384b",
+                }}
+              >
+                Puzzle by Lexicon
+                <br />
+                Pick your track and play.
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowTutorial(true)}
+              aria-label="How to Play"
+              style={{
+                position: "fixed",
+                right: isCompactMobile ? "14px" : "22px",
+                bottom: isCompactMobile ? "max(14px, calc(env(safe-area-inset-bottom) + 8px))" : "22px",
+                width: isCompactMobile ? "46px" : "52px",
+                height: isCompactMobile ? "46px" : "52px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.22)",
+                background: "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
+                color: "#2f2419",
+                cursor: "pointer",
+                fontSize: isCompactMobile ? "22px" : "24px",
+                fontWeight: 800,
+                boxShadow: "0 12px 28px rgba(78, 56, 28, 0.12)",
+                display: "grid",
+                placeItems: "center",
+                zIndex: 15,
+              }}
+            >
+              ?
+            </button>
           </div>
         ) : (
           <div
