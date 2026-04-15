@@ -78,7 +78,10 @@ type GameStats = {
   gamesPlayed: number
   currentStreak: number
   maxStreak: number
+  perfectCurrentStreak: number
+  perfectMaxStreak: number
   lastPlayedDate: string | null
+  lastPerfectDate: string | null
   ratingCounts: Record<string, number>
 }
 
@@ -86,12 +89,16 @@ const defaultStats: GameStats = {
   gamesPlayed: 0,
   currentStreak: 0,
   maxStreak: 0,
+  perfectCurrentStreak: 0,
+  perfectMaxStreak: 0,
   lastPlayedDate: null,
+  lastPerfectDate: null,
   ratingCounts: { Perfect: 0, Excellent: 0, Great: 0, Solid: 0, "Keep trying": 0 },
 }
 
 const STATS_KEY = "daily-word-game-stats"
 const SOUND_MUTED_KEY = "daily-word-game-sound-muted"
+const HOME_BRAND_TILES = ["L", "E", "X", "I", "C", "O", "N"]
 
 function shuffleArray(items: RackSlot[]) {
   const copy = [...items]
@@ -111,6 +118,28 @@ function moveItemToIndex<T>(items: T[], fromIndex: number, toIndex: number) {
 
 function getLocalDateString() {
   return new Intl.DateTimeFormat("en-CA").format(new Date())
+}
+
+function formatDisplayDate(date: string) {
+  const [year, month, day] = date.split("-")
+  if (!year || !month || !day) return date
+  return `${month}-${day}-${year}`
+}
+
+function getMonthKey(date: string) {
+  const [year, month] = date.split("-")
+  if (!year || !month) return date
+  return `${year}-${month}`
+}
+
+function formatCalendarMonthLabel(monthKey: string) {
+  const [year, month] = monthKey.split("-")
+  if (!year || !month) return monthKey
+  const date = new Date(Number(year), Number(month) - 1, 1)
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(date)
 }
 
 function triggerHapticFeedback(pattern: number | number[] = 12) {
@@ -142,6 +171,7 @@ function createPlacementSound(ctx: AudioContext) {
 
 export default function Home() {
   const todayDate = useMemo(() => getLocalDateString(), [])
+  const todayDisplayDate = useMemo(() => formatDisplayDate(todayDate), [todayDate])
   const [selectedDate, setSelectedDate] = useState(todayDate)
   const [selectedMode, setSelectedMode] = useState<"easy" | "hard">("easy")
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
@@ -149,6 +179,8 @@ export default function Home() {
   const [showTutorial, setShowTutorial] = useState(false)
   const [showDailyModePicker, setShowDailyModePicker] = useState(false)
   const [viewMode, setViewMode] = useState<"home" | "game">("home")
+  const [archiveMonthKey, setArchiveMonthKey] = useState(() => getMonthKey(todayDate))
+  const [completedArchiveDates, setCompletedArchiveDates] = useState<Record<string, boolean>>({})
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
   const [touchDragEngaged, setTouchDragEngaged] = useState(false)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
@@ -207,6 +239,9 @@ export default function Home() {
   const touchDragActivationDistance = 14
 
   const [rack, setRack] = useState<RackSlot[]>(startingRack)
+  const [homeBrandRack, setHomeBrandRack] = useState<string[]>(HOME_BRAND_TILES)
+  const [homeBrandDraggedIndex, setHomeBrandDraggedIndex] = useState<number | null>(null)
+  const [homeBrandDropIndex, setHomeBrandDropIndex] = useState<number | null>(null)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
   const [draggedTile, setDraggedTile] = useState<TileSelection>(null)
   const [draggedPlacedTile, setDraggedPlacedTile] = useState<DraggedPlacedTile>(null)
@@ -349,6 +384,40 @@ export default function Home() {
     }
   }, [
     todayDate,
+    attemptsLeft,
+    bestScore,
+    attemptHistory,
+    submittedWords,
+    submittedScore,
+    hintLevel,
+    hasLoadedSave,
+  ])
+
+  useEffect(() => {
+    try {
+      const completionMap: Record<string, boolean> = {}
+
+      for (const puzzleEntry of DAILY_PUZZLES) {
+        for (const mode of ["easy", "hard"] as const) {
+          const saved = localStorage.getItem(`daily-word-game-${puzzleEntry.date}-${mode}`)
+          if (!saved) continue
+
+          try {
+            const parsed = JSON.parse(saved) as Partial<SavedGameState>
+            if (parsed.attemptsLeft === 0) {
+              completionMap[puzzleEntry.date] = true
+            }
+          } catch {
+            // ignore bad saved data
+          }
+        }
+      }
+
+      setCompletedArchiveDates(completionMap)
+    } catch {
+      // ignore
+    }
+  }, [
     attemptsLeft,
     bestScore,
     attemptHistory,
@@ -532,6 +601,23 @@ export default function Home() {
     setSelectedTile(null)
     setRackDropIndex(null)
     setMessage("Rack rearranged.")
+  }
+
+  function reorderHomeBrandTile(fromIndex: number, targetIndex: number) {
+    let finalIndex = targetIndex
+    if (fromIndex < targetIndex) {
+      finalIndex = targetIndex - 1
+    }
+
+    if (finalIndex === fromIndex) {
+      setHomeBrandDraggedIndex(null)
+      setHomeBrandDropIndex(null)
+      return
+    }
+
+    setHomeBrandRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
+    setHomeBrandDraggedIndex(null)
+    setHomeBrandDropIndex(null)
   }
 
   function handleRackGapDrop(targetIndex: number) {
@@ -1120,7 +1206,15 @@ export default function Home() {
 
     try {
       const saved = localStorage.getItem(STATS_KEY)
-      const current: GameStats = saved ? JSON.parse(saved) : defaultStats
+      const parsed = saved ? JSON.parse(saved) : {}
+      const current: GameStats = {
+        ...defaultStats,
+        ...parsed,
+        ratingCounts: {
+          ...defaultStats.ratingCounts,
+          ...(parsed.ratingCounts ?? {}),
+        },
+      }
       if (current.lastPlayedDate === puzzle.date) return
 
       const yesterday = new Date(new Date(puzzle.date).getTime() - 86400000)
@@ -1128,12 +1222,21 @@ export default function Home() {
         .slice(0, 10)
       const newStreak =
         current.lastPlayedDate === yesterday ? current.currentStreak + 1 : 1
+      const isPerfectGame = rating === "Perfect"
+      const newPerfectStreak = isPerfectGame
+        ? current.lastPerfectDate === yesterday
+          ? current.perfectCurrentStreak + 1
+          : 1
+        : 0
 
       const newStats: GameStats = {
         gamesPlayed: current.gamesPlayed + 1,
         currentStreak: newStreak,
         maxStreak: Math.max(current.maxStreak, newStreak),
+        perfectCurrentStreak: newPerfectStreak,
+        perfectMaxStreak: Math.max(current.perfectMaxStreak, newPerfectStreak),
         lastPlayedDate: puzzle.date,
+        lastPerfectDate: isPerfectGame ? puzzle.date : current.lastPerfectDate,
         ratingCounts: {
           ...current.ratingCounts,
           [rating]: (current.ratingCounts[rating] ?? 0) + 1,
@@ -1448,8 +1551,8 @@ export default function Home() {
   async function shareResults() {
     const header =
       selectedMode === "hard"
-        ? `Daily Word Game Hard ${puzzle.date}`
-        : `Daily Word Game ${puzzle.date}`
+        ? `Lexicon Hard ${formatDisplayDate(puzzle.date)}`
+        : `Lexicon ${formatDisplayDate(puzzle.date)}`
     const summary = isPerfectFirstTryRun()
       ? selectedMode === "hard"
         ? `Perfect hard first try: ${bestScore}/${solution.bestScore}`
@@ -1522,6 +1625,7 @@ export default function Home() {
           { label: "Played", value: stats.gamesPlayed },
           { label: "Streak", value: stats.currentStreak },
           { label: "Best Streak", value: stats.maxStreak },
+          { label: "Perfect Streak", value: stats.perfectCurrentStreak },
         ].map(({ label, value }) => (
           <div key={label} style={{ textAlign: "center" }}>
             <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
@@ -1563,6 +1667,37 @@ export default function Home() {
       )}
     </div>
   )
+  const archivePuzzles = DAILY_PUZZLES.filter((p) => p.date <= todayDate)
+  const archiveMonthKeys = Array.from(new Set(archivePuzzles.map((p) => getMonthKey(p.date)))).sort()
+  const activeArchiveMonthKey =
+    archiveMonthKeys.includes(archiveMonthKey)
+      ? archiveMonthKey
+      : archiveMonthKeys[archiveMonthKeys.length - 1] ?? getMonthKey(todayDate)
+  const activeArchiveMonthIndex = archiveMonthKeys.indexOf(activeArchiveMonthKey)
+  const archiveDateMap = new Map(archivePuzzles.map((p) => [p.date, p]))
+  const [archiveYear, archiveMonth] = activeArchiveMonthKey.split("-").map(Number)
+  const archiveDaysInMonth =
+    archiveYear && archiveMonth ? new Date(archiveYear, archiveMonth, 0).getDate() : 0
+  const archiveFirstWeekday =
+    archiveYear && archiveMonth ? new Date(archiveYear, archiveMonth - 1, 1).getDay() : 0
+  const archiveCalendarCells: Array<{ date: string | null; puzzleDate: string | null }> = []
+
+  for (let index = 0; index < archiveFirstWeekday; index++) {
+    archiveCalendarCells.push({ date: null, puzzleDate: null })
+  }
+
+  for (let day = 1; day <= archiveDaysInMonth; day++) {
+    const date = `${String(archiveYear).padStart(4, "0")}-${String(archiveMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    archiveCalendarCells.push({
+      date,
+      puzzleDate: archiveDateMap.has(date) ? date : null,
+    })
+  }
+
+  while (archiveCalendarCells.length % 7 !== 0) {
+    archiveCalendarCells.push({ date: null, puzzleDate: null })
+  }
+
   const archivePanel = showArchive && (
     <div
       style={{
@@ -1580,35 +1715,166 @@ export default function Home() {
       <div
         style={{
           display: "flex",
-          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          marginTop: "14px",
+          marginBottom: "12px",
+        }}
+      >
+        <button
+          onClick={() =>
+            setArchiveMonthKey(
+              archiveMonthKeys[Math.max(0, activeArchiveMonthIndex - 1)] ?? activeArchiveMonthKey
+            )
+          }
+          disabled={activeArchiveMonthIndex <= 0}
+          style={{
+            width: "38px",
+            height: "38px",
+            borderRadius: "999px",
+            border: "1px solid rgba(123, 98, 65, 0.18)",
+            backgroundColor: activeArchiveMonthIndex <= 0 ? "#e7dcc8" : "#efe2c7",
+            color: activeArchiveMonthIndex <= 0 ? "#9d8b71" : "#2f2419",
+            cursor: activeArchiveMonthIndex <= 0 ? "not-allowed" : "pointer",
+            fontWeight: 800,
+            flexShrink: 0,
+          }}
+        >
+          {"<"}
+        </button>
+        <div
+          style={{
+            flex: 1,
+            textAlign: "center",
+            fontSize: "16px",
+            fontWeight: 800,
+            color: "#3a2c1f",
+          }}
+        >
+          {formatCalendarMonthLabel(activeArchiveMonthKey)}
+        </div>
+        <button
+          onClick={() =>
+            setArchiveMonthKey(
+              archiveMonthKeys[Math.min(archiveMonthKeys.length - 1, activeArchiveMonthIndex + 1)] ??
+                activeArchiveMonthKey
+            )
+          }
+          disabled={activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1}
+          style={{
+            width: "38px",
+            height: "38px",
+            borderRadius: "999px",
+            border: "1px solid rgba(123, 98, 65, 0.18)",
+            backgroundColor:
+              activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
+                ? "#e7dcc8"
+                : "#efe2c7",
+            color:
+              activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
+                ? "#9d8b71"
+                : "#2f2419",
+            cursor:
+              activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
+                ? "not-allowed"
+                : "pointer",
+            fontWeight: 800,
+            flexShrink: 0,
+          }}
+        >
+          {">"}
+        </button>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
           gap: "8px",
-          marginTop: "12px",
           maxHeight: viewMode === "home" ? "280px" : "180px",
           overflowY: "auto",
           paddingRight: "4px",
         }}
       >
-        {DAILY_PUZZLES.filter((p) => p.date <= todayDate)
-          .slice()
-          .reverse()
-          .map((p) => (
+        {["S", "M", "T", "W", "T", "F", "S"].map((day) => (
+          <div
+            key={day}
+            style={{
+              textAlign: "center",
+              fontSize: "12px",
+              fontWeight: 800,
+              color: "#8a6a42",
+              paddingBottom: "4px",
+            }}
+          >
+            {day}
+          </div>
+        ))}
+        {archiveCalendarCells.map((cell, index) => {
+          if (!cell.date) {
+            return (
+              <div
+                key={`empty-${index}`}
+                style={{
+                  aspectRatio: "1 / 1",
+                  borderRadius: "12px",
+                  backgroundColor: "rgba(203, 190, 170, 0.22)",
+                }}
+              />
+            )
+          }
+
+          const isToday = cell.date === todayDate
+          const isSelected = cell.date === selectedDate && viewMode === "game"
+          const isCompleted = Boolean(completedArchiveDates[cell.date])
+          const hasPuzzle = Boolean(cell.puzzleDate)
+
+          if (!hasPuzzle) {
+            return (
+              <div
+                key={cell.date}
+                style={{
+                  aspectRatio: "1 / 1",
+                  borderRadius: "12px",
+                  backgroundColor: "rgba(203, 190, 170, 0.22)",
+                  color: "#9d8b71",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                }}
+              >
+                {Number(cell.date.slice(-2))}
+              </div>
+            )
+          }
+
+          return (
             <button
-              key={p.date}
-              onClick={() => selectPuzzleDate(p.date)}
+              key={cell.date}
+              onClick={() => selectPuzzleDate(cell.date!)}
               style={{
-                padding: "7px 12px",
-                fontSize: "13px",
-                borderRadius: "999px",
-                border: "1px solid rgba(123, 98, 65, 0.2)",
-                backgroundColor: p.date === selectedDate && viewMode === "game" ? "#b98f58" : "#efe2c7",
-                color: p.date === selectedDate && viewMode === "game" ? "#fff" : "#2f2419",
+                aspectRatio: "1 / 1",
+                borderRadius: "12px",
+                border: isSelected
+                  ? "2px solid #5f4221"
+                  : isToday
+                    ? "2px solid #b98f58"
+                    : "1px solid rgba(123, 98, 65, 0.18)",
+                backgroundColor: isCompleted ? "#7aad2a" : "#efe2c7",
+                color: isCompleted ? "#fffaf1" : "#2f2419",
                 cursor: "pointer",
-                fontWeight: 700,
+                fontWeight: 800,
+                fontSize: "14px",
+                display: "grid",
+                placeItems: "center",
+                boxShadow: isCompleted ? "0 8px 16px rgba(114, 173, 45, 0.18)" : "none",
               }}
             >
-              {p.date === todayDate ? `${p.date} (Today)` : p.date}
+              {Number(cell.date.slice(-2))}
             </button>
-          ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -1648,8 +1914,22 @@ export default function Home() {
                   "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
                 border: "1px solid rgba(123, 98, 65, 0.14)",
                 boxShadow: "0 18px 36px rgba(78, 56, 28, 0.08)",
+                position: "relative",
               }}
             >
+              <div
+                style={{
+                  position: "absolute",
+                  top: isCompactMobile ? "18px" : "24px",
+                  right: isCompactMobile ? "18px" : "24px",
+                  fontSize: isCompactMobile ? "12px" : "13px",
+                  color: "#8a6a42",
+                  fontWeight: 700,
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {todayDisplayDate}
+              </div>
               <p
                 style={{
                   margin: 0,
@@ -1662,35 +1942,100 @@ export default function Home() {
               >
                 Daily Puzzle
               </p>
-              <h1
+              <div
+                aria-label="Lexicon"
                 style={{
-                  margin: isCompactMobile ? "8px 0 6px" : "10px 0 8px",
-                  fontSize: isCompactMobile ? "34px" : "clamp(42px, 7vw, 64px)",
-                  lineHeight: 0.98,
-                  fontFamily: "Georgia, serif",
+                  display: "flex",
+                  flexWrap: "nowrap",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: isCompactMobile ? "2px" : "4px",
+                  margin: isCompactMobile ? "8px 0 10px" : "10px 0 12px",
+                  overflowX: "auto",
+                  paddingBottom: "4px",
                 }}
               >
-                Daily Word
-                <br />
-                Game
-              </h1>
+                {homeBrandRack.map((letter, index) => (
+                  <div
+                    key={`${letter}-${index}`}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      setHomeBrandDropIndex(index)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      if (homeBrandDraggedIndex === null) return
+                      reorderHomeBrandTile(homeBrandDraggedIndex, index)
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: isCompactMobile ? "2px" : "4px",
+                    }}
+                  >
+                    <div
+                      draggable
+                      onDragStart={() => setHomeBrandDraggedIndex(index)}
+                      onDragEnd={() => {
+                        setHomeBrandDraggedIndex(null)
+                        setHomeBrandDropIndex(null)
+                      }}
+                      style={{
+                        width: isCompactMobile ? "40px" : "56px",
+                        height: isCompactMobile ? "40px" : "56px",
+                        borderRadius: isCompactMobile ? "10px" : "14px",
+                        border: "2px solid rgba(135,106,63,0.9)",
+                        background:
+                          "linear-gradient(180deg, rgba(242,223,176,0.98) 0%, rgba(232,206,143,0.98) 100%)",
+                        boxShadow: "0 8px 14px rgba(98, 74, 34, 0.12)",
+                        display: "grid",
+                        placeItems: "center",
+                        fontSize: isCompactMobile ? "24px" : "34px",
+                        fontWeight: 800,
+                        color: "#332616",
+                        position: "relative",
+                        cursor: "grab",
+                        transform:
+                          homeBrandDraggedIndex === index
+                            ? "scale(0.96) rotate(-2deg)"
+                            : "rotate(0deg)",
+                        opacity: homeBrandDraggedIndex === index ? 0.75 : 1,
+                        flexShrink: 0,
+                        userSelect: "none",
+                      }}
+                    >
+                      <span>{letter}</span>
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: isCompactMobile ? "5px" : "7px",
+                          bottom: isCompactMobile ? "4px" : "6px",
+                          fontSize: isCompactMobile ? "9px" : "11px",
+                          fontWeight: 700,
+                          color: "#6d5430",
+                          opacity: 0.85,
+                        }}
+                      >
+                        {LETTER_SCORES[letter] ?? 0}
+                      </span>
+                    </div>
+                    {homeBrandDropIndex === index && homeBrandDraggedIndex !== null && (
+                      <div
+                        style={{
+                          width: isCompactMobile ? "4px" : "6px",
+                          height: isCompactMobile ? "30px" : "40px",
+                          borderRadius: "999px",
+                          backgroundColor: "#7aad2a",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
               <p style={{ margin: 0, fontSize: isCompactMobile ? "15px" : "17px", color: "#5b4630", maxWidth: "40ch", lineHeight: 1.45 }}>
                 Build the best move from a fixed starting board. You get three tries to chase the optimal score.
               </p>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "10px",
-                  marginTop: isCompactMobile ? "16px" : "18px",
-                  fontSize: "13px",
-                  color: "#6d5537",
-                }}
-              >
-                <span>Today: {todayDate}</span>
-                <span>Modes: Easy or Hard</span>
-                <span>{hasSavedTodayGame ? "Saved run available" : "Fresh board ready"}</span>
-              </div>
             </div>
 
             <div
@@ -1896,10 +2241,10 @@ export default function Home() {
               Daily Puzzle
             </p>
             <h1 style={{ fontSize: isCompactMobile ? "22px" : "clamp(28px, 5vw, 42px)", marginBottom: isCompactMobile ? "2px" : "6px", marginTop: isCompactMobile ? "2px" : "6px", fontFamily: "Georgia, serif" }}>
-              Daily Word Game
+              Lexicon
             </h1>
             <p style={{ margin: 0, fontSize: isCompactMobile ? "12px" : "15px", color: "#6d5537" }}>
-              Puzzle date: <strong>{puzzle.date}</strong> · <strong style={{ textTransform: "capitalize" }}>{selectedMode}</strong> mode
+              Puzzle date: <strong>{formatDisplayDate(puzzle.date)}</strong> · <strong style={{ textTransform: "capitalize" }}>{selectedMode}</strong> mode
             </p>
           </div>
 
