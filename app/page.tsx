@@ -178,6 +178,10 @@ export default function Home() {
   const todayDisplayDate = useMemo(() => formatDisplayDate(todayDate), [todayDate])
   const [selectedDate, setSelectedDate] = useState(todayDate)
   const [selectedMode, setSelectedMode] = useState<"easy" | "hard">("easy")
+  const [loadedGameConfig, setLoadedGameConfig] = useState<{ date: string; mode: "easy" | "hard" }>({
+    date: todayDate,
+    mode: "easy",
+  })
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
@@ -198,8 +202,8 @@ export default function Home() {
   const returnPlacedTileToRackRef = useRef<((tile: DraggedPlacedTile) => void) | null>(null)
 
   const puzzle = useMemo(
-    () => getPuzzleByDate(selectedDate, selectedMode),
-    [selectedDate, selectedMode]
+    () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode),
+    [loadedGameConfig]
   )
   const solution = useMemo(() => solvePuzzle(puzzle), [puzzle])
 
@@ -211,7 +215,8 @@ export default function Home() {
   const boardSize = puzzle.boardSize
   const maxAttempts = 3
   const startingRack = puzzle.rack
-  const storageKey = `daily-word-game-${puzzle.date}-${selectedMode}`
+  const activeGameMode = loadedGameConfig.mode
+  const storageKey = `daily-word-game-${puzzle.date}-${loadedGameConfig.mode}`
   const boardGap = isCompactMobile ? 3 : 4
   const boardCellSize = isCompactMobile ? 46 : 54
   const compactRackGapWidth = 2
@@ -234,7 +239,7 @@ export default function Home() {
   const compactViewportWidth = Math.max(0, viewportSize.width - 16)
   const compactViewportHeightBudget = Math.max(
     0,
-    viewportSize.height - (selectedMode === "hard" ? 318 : 286)
+    viewportSize.height - (activeGameMode === "hard" ? 318 : 286)
   )
   const compactPuzzleFrameWidth =
     isCompactMobile && compactViewportWidth > 0
@@ -444,6 +449,10 @@ export default function Home() {
         }
       }
 
+      if (attemptsLeft === 0) {
+        completionMap[selectedDate] = true
+      }
+
       setCompletedArchiveDates(completionMap)
     } catch {
       // ignore
@@ -456,6 +465,7 @@ export default function Home() {
     submittedScore,
     hintLevel,
     hasLoadedSave,
+    selectedDate,
   ])
 
   useEffect(() => {
@@ -1283,6 +1293,7 @@ export default function Home() {
 
   function selectPuzzleDate(date: string, mode: "easy" | "hard" = selectedMode) {
     const newPuzzle = getPuzzleByDate(date, mode)
+    setLoadedGameConfig({ date, mode })
     setSelectedMode(mode)
     setViewMode("game")
     setSelectedDate(date)
@@ -1624,14 +1635,14 @@ export default function Home() {
 
   async function shareResults() {
     const header =
-      selectedMode === "hard"
+      activeGameMode === "hard"
         ? `Lexicon Hard ${formatDisplayDate(puzzle.date)}`
         : `Lexicon ${formatDisplayDate(puzzle.date)}`
     const summary = isPerfectFirstTryRun()
-      ? selectedMode === "hard"
+      ? activeGameMode === "hard"
         ? `Perfect hard first try: ${bestScore}/${solution.bestScore}`
         : `Perfect first try: ${bestScore}/${solution.bestScore}`
-      : selectedMode === "hard"
+      : activeGameMode === "hard"
         ? `Hard Mode Score: ${bestScore}/${solution.bestScore}`
         : `Best Score: ${bestScore}/${solution.bestScore}`
     const hintSummary = getHintStatusText()
@@ -2448,13 +2459,13 @@ export default function Home() {
                   padding: "7px 10px",
                   fontSize: "12px",
                   borderRadius: "999px",
-                  backgroundColor: selectedMode === "hard" ? "rgba(90,58,20,0.96)" : "rgba(219,233,255,0.96)",
-                  color: selectedMode === "hard" ? "#fffaf1" : "#26456e",
+                  backgroundColor: activeGameMode === "hard" ? "rgba(90,58,20,0.96)" : "rgba(219,233,255,0.96)",
+                  color: activeGameMode === "hard" ? "#fffaf1" : "#26456e",
                   fontWeight: 800,
                   textTransform: "capitalize",
                 }}
               >
-                {selectedMode}
+                {activeGameMode}
               </span>
             </div>
             <button
@@ -2494,7 +2505,7 @@ export default function Home() {
               }}
             >
               <strong>{formatDisplayDate(puzzle.date)}</strong> ·{" "}
-              <strong style={{ textTransform: "capitalize" }}>{selectedMode}</strong> mode
+              <strong style={{ textTransform: "capitalize" }}>{activeGameMode}</strong> mode
             </div>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
