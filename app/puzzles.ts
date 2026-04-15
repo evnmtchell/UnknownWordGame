@@ -1,3 +1,5 @@
+import { VALID_WORDS } from "./words"
+
 export type BonusType = "DL" | "TL" | "DW" | "TW"
 
 export type PuzzleCell = {
@@ -23,9 +25,11 @@ export type DailyPuzzle = {
   optimalWords: string[]
 }
 
-function countStartingWords(filledCells: PuzzleCell[]) {
+export type PuzzleMode = "easy" | "hard"
+
+function getStartingWordRuns(filledCells: PuzzleCell[]) {
   const occupied = new Map(filledCells.map((cell) => [`${cell.row},${cell.col}`, cell]))
-  let wordCount = 0
+  const runs: PuzzleCell[][] = []
 
   for (const cell of filledCells) {
     const leftKey = `${cell.row},${cell.col - 1}`
@@ -34,18 +38,87 @@ function countStartingWords(filledCells: PuzzleCell[]) {
     const downKey = `${cell.row + 1},${cell.col}`
 
     if (!occupied.has(leftKey) && occupied.has(rightKey)) {
-      wordCount += 1
+      const run = [cell]
+      let nextCol = cell.col + 1
+      while (occupied.has(`${cell.row},${nextCol}`)) {
+        run.push(occupied.get(`${cell.row},${nextCol}`)!)
+        nextCol += 1
+      }
+      runs.push(run)
     }
 
     if (!occupied.has(upKey) && occupied.has(downKey)) {
-      wordCount += 1
+      const run = [cell]
+      let nextRow = cell.row + 1
+      while (occupied.has(`${nextRow},${cell.col}`)) {
+        run.push(occupied.get(`${nextRow},${cell.col}`)!)
+        nextRow += 1
+      }
+      runs.push(run)
     }
   }
 
-  return wordCount
+  return runs
 }
 
-function validatePuzzleLayout(puzzle: DailyPuzzle) {
+function isConnectedLayout(filledCells: PuzzleCell[]) {
+  if (filledCells.length === 0) {
+    return true
+  }
+
+  const occupied = new Set(filledCells.map((cell) => `${cell.row},${cell.col}`))
+  const seen = new Set<string>()
+  const queue = [`${filledCells[0].row},${filledCells[0].col}`]
+
+  while (queue.length > 0) {
+    const key = queue.shift()!
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    const [rowText, colText] = key.split(",")
+    const row = Number(rowText)
+    const col = Number(colText)
+
+    for (const neighbor of [
+      `${row - 1},${col}`,
+      `${row + 1},${col}`,
+      `${row},${col - 1}`,
+      `${row},${col + 1}`,
+    ]) {
+      if (occupied.has(neighbor) && !seen.has(neighbor)) {
+        queue.push(neighbor)
+      }
+    }
+  }
+
+  return seen.size === filledCells.length
+}
+
+function everyCellBelongsToAWord(filledCells: PuzzleCell[]) {
+  const cellsInWords = new Set(
+    getStartingWordRuns(filledCells)
+      .flat()
+      .map((cell) => `${cell.row},${cell.col}`)
+  )
+
+  return filledCells.every((cell) => cellsInWords.has(`${cell.row},${cell.col}`))
+}
+
+function allRunsAreValidWords(filledCells: PuzzleCell[]) {
+  return getStartingWordRuns(filledCells).every((run) =>
+    VALID_WORDS.has(run.map((cell) => cell.letter).join(""))
+  )
+}
+
+function validatePuzzleLayout(
+  puzzle: DailyPuzzle,
+  options: { minWords: number; maxWords?: number; minLength?: number; maxLength?: number } = {
+    minWords: 2,
+    maxWords: 4,
+  }
+) {
   const center = Math.floor(puzzle.boardSize / 2)
   const centerCovered = puzzle.filledCells.some(
     (cell) => cell.row === center && cell.col === center
@@ -55,11 +128,53 @@ function validatePuzzleLayout(puzzle: DailyPuzzle) {
     throw new Error(`${puzzle.id} (${puzzle.date}) must cover the center tile.`)
   }
 
-  const startingWordCount = countStartingWords(puzzle.filledCells)
-  if (startingWordCount < 2 || startingWordCount > 4) {
+  if (!isConnectedLayout(puzzle.filledCells)) {
+    throw new Error(`${puzzle.id} (${puzzle.date}) must be one connected board shape.`)
+  }
+
+  if (!everyCellBelongsToAWord(puzzle.filledCells)) {
     throw new Error(
-      `${puzzle.id} (${puzzle.date}) must start with 2 to 4 words, found ${startingWordCount}.`
+      `${puzzle.id} (${puzzle.date}) includes isolated tiles that do not belong to a full word.`
     )
+  }
+
+  if (!allRunsAreValidWords(puzzle.filledCells)) {
+    throw new Error(`${puzzle.id} (${puzzle.date}) must use only valid words in every run.`)
+  }
+
+  const startingWordRuns = getStartingWordRuns(puzzle.filledCells)
+  const startingWordCount = startingWordRuns.length
+  const exceedsMax =
+    typeof options.maxWords === "number" && startingWordCount > options.maxWords
+
+  if (startingWordCount < options.minWords || exceedsMax) {
+    const expectedRange =
+      typeof options.maxWords === "number"
+        ? `${options.minWords} to ${options.maxWords} words`
+        : `at least ${options.minWords} words`
+    throw new Error(
+      `${puzzle.id} (${puzzle.date}) must start with ${expectedRange}, found ${startingWordCount}.`
+    )
+  }
+
+  const invalidLengthRun = startingWordRuns.find((run) => {
+    if (typeof options.minLength === "number" && run.length < options.minLength) {
+      return true
+    }
+
+    if (typeof options.maxLength === "number" && run.length > options.maxLength) {
+      return true
+    }
+
+    return false
+  })
+
+  if (invalidLengthRun) {
+    const expectedLength =
+      typeof options.minLength === "number" && typeof options.maxLength === "number"
+        ? `${options.minLength} to ${options.maxLength} letters`
+        : "the expected letter range"
+    throw new Error(`${puzzle.id} (${puzzle.date}) must use starting words of ${expectedLength}.`)
   }
 }
 
@@ -81,6 +196,138 @@ const defaultBonusCells: BonusCell[] = [
   { row: 4, col: 2, type: "TL" },
   { row: 4, col: 4, type: "TL" },
 ]
+
+const hardModeBonusCells: BonusCell[] = [
+  { row: 0, col: 0, type: "TW" },
+  { row: 0, col: 10, type: "TW" },
+  { row: 10, col: 0, type: "TW" },
+  { row: 10, col: 10, type: "TW" },
+  { row: 1, col: 1, type: "DW" },
+  { row: 1, col: 9, type: "DW" },
+  { row: 5, col: 5, type: "DW" },
+  { row: 9, col: 1, type: "DW" },
+  { row: 9, col: 9, type: "DW" },
+  { row: 2, col: 2, type: "TL" },
+  { row: 2, col: 8, type: "TL" },
+  { row: 8, col: 2, type: "TL" },
+  { row: 8, col: 8, type: "TL" },
+  { row: 0, col: 5, type: "TL" },
+  { row: 5, col: 0, type: "TL" },
+  { row: 5, col: 10, type: "TL" },
+  { row: 10, col: 5, type: "TL" },
+  { row: 0, col: 4, type: "DL" },
+  { row: 0, col: 6, type: "DL" },
+  { row: 4, col: 0, type: "DL" },
+  { row: 4, col: 10, type: "DL" },
+  { row: 6, col: 0, type: "DL" },
+  { row: 6, col: 10, type: "DL" },
+  { row: 10, col: 4, type: "DL" },
+  { row: 10, col: 6, type: "DL" },
+]
+
+function createSeededRandom(seedText: string) {
+  let seed = 0
+  for (const char of seedText) {
+    seed = (seed * 31 + char.charCodeAt(0)) >>> 0
+  }
+
+  return () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0
+    return seed / 4294967296
+  }
+}
+
+const RACK_TILE_BAG = [
+  ..."AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ??",
+]
+
+function generateRackForSeed(length: number, seedText: string) {
+  const random = createSeededRandom(seedText)
+  const bag = [...RACK_TILE_BAG]
+  const rack: string[] = []
+
+  for (let index = 0; index < length && bag.length > 0; index++) {
+    const bagIndex = Math.floor(random() * bag.length)
+    rack.push(bag.splice(bagIndex, 1)[0])
+  }
+
+  const vowelCount = rack.filter((letter) => ["A", "E", "I", "O", "U"].includes(letter)).length
+  if (vowelCount < 2 && rack.length > 0) {
+    const vowelBag = ["A", "E", "I", "O", "U"]
+    const replaceIndex = rack.findIndex((letter) => !["A", "E", "I", "O", "U", "?"].includes(letter))
+    if (replaceIndex >= 0) {
+      rack[replaceIndex] = vowelBag[Math.floor(random() * vowelBag.length)]
+    }
+  }
+
+  return rack
+}
+
+type HardSlot = {
+  direction: "across" | "down"
+  row: number
+  col: number
+  word: string
+}
+
+const hardModeLayouts: HardSlot[][] = [
+  [
+    { direction: "across", row: 2, col: 5, word: "BALL" },
+    { direction: "across", row: 4, col: 5, word: "LOAN" },
+    { direction: "across", row: 6, col: 5, word: "NOTE" },
+    { direction: "across", row: 8, col: 5, word: "EARN" },
+    { direction: "down", row: 2, col: 5, word: "BALANCE" },
+    { direction: "down", row: 2, col: 8, word: "LANTERN" },
+  ],
+]
+
+function buildHardLayout(slots: HardSlot[]) {
+  const cells = new Map<string, PuzzleCell>()
+
+  for (const slot of slots) {
+    for (let index = 0; index < slot.word.length; index++) {
+      const row = slot.direction === "across" ? slot.row : slot.row + index
+      const col = slot.direction === "across" ? slot.col + index : slot.col
+      const key = `${row},${col}`
+      const letter = slot.word[index]
+      const existing = cells.get(key)
+
+      if (existing && existing.letter !== letter) {
+        throw new Error(`Hard layout conflict at ${key}.`)
+      }
+
+      cells.set(key, { row, col, letter })
+    }
+  }
+
+  return Array.from(cells.values())
+}
+
+function transformHardLayout(cells: PuzzleCell[], transform: number) {
+  return cells.map((cell) => {
+    switch (transform) {
+      case 1:
+        return { row: cell.col, col: cell.row, letter: cell.letter }
+      default:
+        return cell
+    }
+  })
+}
+
+function getHardModeLayoutForDate(date: string) {
+  const random = createSeededRandom(`hard-${date}`)
+  const slotLayout = hardModeLayouts[Math.floor(random() * hardModeLayouts.length)]
+  const baseLayout = buildHardLayout(slotLayout)
+  const transformedLayout = transformHardLayout(baseLayout, Math.floor(random() * 2))
+
+  for (const cell of transformedLayout) {
+    if (cell.row < 0 || cell.row >= 11 || cell.col < 0 || cell.col >= 11) {
+      throw new Error(`Generated hard puzzle for ${date} produced out-of-bounds cell.`)
+    }
+  }
+
+  return transformedLayout
+}
 
 const harderFutureThreeWordLayouts: PuzzleCell[][] = [
   [
@@ -215,6 +462,19 @@ const harderFutureThreeWordLayouts: PuzzleCell[][] = [
     { row: 1, col: 5, letter: "R" },
     { row: 2, col: 5, letter: "U" },
   ],
+  [
+    { row: 3, col: 0, letter: "Q" },
+    { row: 3, col: 1, letter: "U" },
+    { row: 3, col: 2, letter: "A" },
+    { row: 3, col: 3, letter: "R" },
+    { row: 3, col: 4, letter: "T" },
+    { row: 3, col: 5, letter: "Z" },
+    { row: 4, col: 2, letter: "I" },
+    { row: 5, col: 2, letter: "L" },
+    { row: 0, col: 4, letter: "S" },
+    { row: 1, col: 4, letter: "U" },
+    { row: 2, col: 4, letter: "I" },
+  ],
 ]
 
 const baseDailyPuzzles: DailyPuzzle[] = [
@@ -304,13 +564,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-09",
     boardSize: 7,
     rack: ["S", "T", "R", "E", "I", "N", "G"],
-    filledCells: [
-      { row: 3, col: 2, letter: "O" },
-      { row: 3, col: 3, letter: "A" },
-      { row: 3, col: 4, letter: "K" },
-      { row: 2, col: 3, letter: "R" },
-      { row: 4, col: 3, letter: "N" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[0],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -320,13 +574,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-10",
     boardSize: 7,
     rack: ["S", "T", "R", "E", "I", "L", "K"],
-    filledCells: [
-      { row: 3, col: 2, letter: "N" },
-      { row: 3, col: 3, letter: "A" },
-      { row: 3, col: 4, letter: "P" },
-      { row: 2, col: 3, letter: "T" },
-      { row: 4, col: 3, letter: "P" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[1],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -336,13 +584,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-11",
     boardSize: 7,
     rack: ["S", "E", "R", "A", "N", "G", "L"],
-    filledCells: [
-      { row: 2, col: 2, letter: "B" },
-      { row: 2, col: 3, letter: "I" },
-      { row: 2, col: 4, letter: "T" },
-      { row: 1, col: 3, letter: "P" },
-      { row: 3, col: 3, letter: "N" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[2],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -352,13 +594,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-12",
     boardSize: 7,
     rack: ["S", "T", "R", "I", "N", "G", "L"],
-    filledCells: [
-      { row: 3, col: 2, letter: "A" },
-      { row: 3, col: 3, letter: "G" },
-      { row: 3, col: 4, letter: "E" },
-      { row: 2, col: 2, letter: "B" },
-      { row: 4, col: 2, letter: "R" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[3],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -368,13 +604,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-13",
     boardSize: 7,
     rack: ["S", "T", "R", "I", "N", "G", "D"],
-    filledCells: [
-      { row: 3, col: 2, letter: "A" },
-      { row: 3, col: 3, letter: "C" },
-      { row: 3, col: 4, letter: "E" },
-      { row: 2, col: 3, letter: "I" },
-      { row: 4, col: 3, letter: "E" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[4],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -384,13 +614,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-14",
     boardSize: 7,
     rack: ["S", "T", "E", "A", "I", "N", "G"],
-    filledCells: [
-      { row: 3, col: 2, letter: "R" },
-      { row: 3, col: 3, letter: "U" },
-      { row: 3, col: 4, letter: "G" },
-      { row: 2, col: 3, letter: "S" },
-      { row: 4, col: 3, letter: "N" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[5],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -400,13 +624,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-15",
     boardSize: 7,
     rack: ["S", "T", "R", "E", "I", "N", "G"],
-    filledCells: [
-      { row: 3, col: 1, letter: "M" },
-      { row: 3, col: 2, letter: "A" },
-      { row: 3, col: 3, letter: "P" },
-      { row: 2, col: 2, letter: "C" },
-      { row: 4, col: 2, letter: "N" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[6],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -416,13 +634,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-16",
     boardSize: 7,
     rack: ["S", "T", "R", "E", "I", "L", "G"],
-    filledCells: [
-      { row: 3, col: 2, letter: "P" },
-      { row: 3, col: 3, letter: "A" },
-      { row: 3, col: 4, letter: "N" },
-      { row: 2, col: 3, letter: "E" },
-      { row: 4, col: 3, letter: "R" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[7],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -432,13 +644,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-17",
     boardSize: 7,
     rack: ["S", "R", "N", "D", "L", "P", "I"],
-    filledCells: [
-      { row: 3, col: 2, letter: "T" },
-      { row: 3, col: 3, letter: "E" },
-      { row: 3, col: 4, letter: "A" },
-      { row: 2, col: 3, letter: "P" },
-      { row: 4, col: 3, letter: "N" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[8],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -448,13 +654,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-18",
     boardSize: 7,
     rack: ["S", "E", "R", "A", "I", "N", "G"],
-    filledCells: [
-      { row: 3, col: 2, letter: "C" },
-      { row: 3, col: 3, letter: "O" },
-      { row: 3, col: 4, letter: "D" },
-      { row: 2, col: 3, letter: "T" },
-      { row: 4, col: 3, letter: "P" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[9],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -464,13 +664,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-19",
     boardSize: 7,
     rack: ["S", "T", "R", "E", "A", "N", "G"],
-    filledCells: [
-      { row: 3, col: 2, letter: "D" },
-      { row: 3, col: 3, letter: "I" },
-      { row: 3, col: 4, letter: "M" },
-      { row: 2, col: 3, letter: "T" },
-      { row: 4, col: 3, letter: "N" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[10],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -480,13 +674,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
     date: "2026-04-20",
     boardSize: 7,
     rack: ["S", "T", "R", "E", "A", "I", "N"],
-    filledCells: [
-      { row: 3, col: 2, letter: "F" },
-      { row: 3, col: 3, letter: "O" },
-      { row: 3, col: 4, letter: "G" },
-      { row: 2, col: 3, letter: "T" },
-      { row: 4, col: 3, letter: "P" },
-    ],
+    filledCells: harderFutureThreeWordLayouts[11],
     bonusCells: defaultBonusCells,
     optimalScore: 0,
     optimalWords: [],
@@ -791,7 +979,7 @@ const baseDailyPuzzles: DailyPuzzle[] = [
 ]
 
 export const DAILY_PUZZLES: DailyPuzzle[] = baseDailyPuzzles.map((puzzle, index) => {
-  if (puzzle.date === "2026-04-08") {
+  if (puzzle.date >= "2026-04-08" && puzzle.date <= "2026-04-20") {
     return puzzle
   }
 
@@ -810,9 +998,31 @@ for (const puzzle of DAILY_PUZZLES) {
   validatePuzzleLayout(puzzle)
 }
 
-export function getTodayPuzzle() {
+export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
+  const easyPuzzle = DAILY_PUZZLES.find((puzzle) => puzzle.date === date) || DAILY_PUZZLES[0]
+  const generatedRack = generateRackForSeed(easyPuzzle.rack.length, `${date}-${mode}-rack`)
+
+  if (mode === "easy") {
+    return {
+      ...easyPuzzle,
+      rack: generatedRack,
+    }
+  }
+
+  const hardPuzzle: DailyPuzzle = {
+    ...easyPuzzle,
+    id: `${easyPuzzle.id}-hard`,
+    boardSize: 11,
+    rack: generatedRack,
+    filledCells: getHardModeLayoutForDate(date),
+    bonusCells: hardModeBonusCells,
+  }
+
+  validatePuzzleLayout(hardPuzzle, { minWords: 6, maxWords: 10, minLength: 3, maxLength: 7 })
+  return hardPuzzle
+}
+
+export function getTodayPuzzle(mode: PuzzleMode = "easy") {
   const today = new Date().toISOString().slice(0, 10)
-  return (
-    DAILY_PUZZLES.find((puzzle) => puzzle.date === today) || DAILY_PUZZLES[0]
-  )
+  return getPuzzleByDate(today, mode)
 }

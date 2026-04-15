@@ -2,7 +2,7 @@
 
 import { startTransition, useEffect, useMemo, useRef, useState } from "react"
 import { VALID_WORDS } from "./words"
-import { getTodayPuzzle, DAILY_PUZZLES, type BonusType } from "./puzzles"
+import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
 
@@ -143,9 +143,11 @@ function createPlacementSound(ctx: AudioContext) {
 export default function Home() {
   const todayDate = useMemo(() => getLocalDateString(), [])
   const [selectedDate, setSelectedDate] = useState(todayDate)
+  const [selectedMode, setSelectedMode] = useState<"easy" | "hard">("easy")
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
+  const [showDailyModePicker, setShowDailyModePicker] = useState(false)
   const [viewMode, setViewMode] = useState<"home" | "game">("home")
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
   const [touchDragEngaged, setTouchDragEngaged] = useState(false)
@@ -161,8 +163,8 @@ export default function Home() {
   const returnPlacedTileToRackRef = useRef<((tile: DraggedPlacedTile) => void) | null>(null)
 
   const puzzle = useMemo(
-    () => DAILY_PUZZLES.find((p) => p.date === selectedDate) || getTodayPuzzle(),
-    [selectedDate]
+    () => getPuzzleByDate(selectedDate, selectedMode),
+    [selectedDate, selectedMode]
   )
   const solution = useMemo(() => solvePuzzle(puzzle), [puzzle])
 
@@ -174,7 +176,7 @@ export default function Home() {
   const boardSize = puzzle.boardSize
   const maxAttempts = 3
   const startingRack = puzzle.rack
-  const storageKey = `daily-word-game-${puzzle.date}`
+  const storageKey = `daily-word-game-${puzzle.date}-${selectedMode}`
   const boardGap = isCompactMobile ? 3 : 4
   const boardCellSize = isCompactMobile ? 46 : 54
   const compactRackGapWidth = 2
@@ -1150,8 +1152,10 @@ export default function Home() {
     localStorage.setItem("daily-word-game-tutorial-seen", "1")
   }
 
-  function selectPuzzleDate(date: string) {
-    const newPuzzle = DAILY_PUZZLES.find((p) => p.date === date) || getTodayPuzzle()
+  function selectPuzzleDate(date: string, mode: "easy" | "hard" = selectedMode) {
+    const newPuzzle = getPuzzleByDate(date, mode)
+    setSelectedMode(mode)
+    setShowDailyModePicker(false)
     setViewMode("game")
     setSelectedDate(date)
     setRack(newPuzzle.rack)
@@ -1181,6 +1185,7 @@ export default function Home() {
     setShowStats(false)
     setShowMoreActions(false)
     setShowPuzzleReview(false)
+    setShowDailyModePicker(false)
   }
 
   function handleRackTouchStart(e: React.TouchEvent, tile: string, index: number) {
@@ -1441,10 +1446,17 @@ export default function Home() {
   }
 
   async function shareResults() {
-    const header = `Daily Word Game ${puzzle.date}`
+    const header =
+      selectedMode === "hard"
+        ? `Daily Word Game Hard ${puzzle.date}`
+        : `Daily Word Game ${puzzle.date}`
     const summary = isPerfectFirstTryRun()
-      ? `Perfect first try: ${bestScore}/${solution.bestScore}`
-      : `Best Score: ${bestScore}/${solution.bestScore}`
+      ? selectedMode === "hard"
+        ? `Perfect hard first try: ${bestScore}/${solution.bestScore}`
+        : `Perfect first try: ${bestScore}/${solution.bestScore}`
+      : selectedMode === "hard"
+        ? `Hard Mode Score: ${bestScore}/${solution.bestScore}`
+        : `Best Score: ${bestScore}/${solution.bestScore}`
     const hintSummary = getHintStatusText()
     const lines = attemptHistory.map((attempt, index) => {
       const icon = getShareIcon(attempt.totalScore)
@@ -1676,7 +1688,7 @@ export default function Home() {
                 }}
               >
                 <span>Today: {todayDate}</span>
-                <span>Best possible: {solution.bestScore}</span>
+                <span>Modes: Easy or Hard</span>
                 <span>{hasSavedTodayGame ? "Saved run available" : "Fresh board ready"}</span>
               </div>
             </div>
@@ -1689,7 +1701,7 @@ export default function Home() {
               }}
             >
               <button
-                onClick={() => selectPuzzleDate(todayDate)}
+                onClick={() => setShowDailyModePicker((prev) => !prev)}
                 style={{
                   ...homeActionButtonStyle,
                   background: "linear-gradient(180deg, rgba(45,34,23,0.98) 0%, rgba(23,18,13,0.98) 100%)",
@@ -1700,7 +1712,7 @@ export default function Home() {
                   {hasSavedTodayGame ? "Continue" : "Start"}
                 </div>
                 <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  {hasSavedTodayGame ? "Today’s Puzzle" : "Play Today"}
+                  Play Daily
                 </div>
               </button>
 
@@ -1747,6 +1759,55 @@ export default function Home() {
               </button>
             </div>
 
+            {showDailyModePicker && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isCompactMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                  gap: "12px",
+                  padding: isCompactMobile ? "14px" : "16px",
+                  borderRadius: "20px",
+                  background: "rgba(255,250,240,0.92)",
+                  border: "1px solid rgba(123, 98, 65, 0.14)",
+                  boxShadow: "0 12px 28px rgba(78, 56, 28, 0.06)",
+                }}
+              >
+                <button
+                  onClick={() => selectPuzzleDate(todayDate, "easy")}
+                  style={homeActionButtonStyle}
+                >
+                  <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
+                    Daily Mode
+                  </div>
+                  <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
+                    Easy
+                  </div>
+                  <div style={{ marginTop: "6px", fontSize: "13px", color: "#6d5537", lineHeight: 1.35 }}>
+                    The standard daily board.
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => selectPuzzleDate(todayDate, "hard")}
+                  style={{
+                    ...homeActionButtonStyle,
+                    background: "linear-gradient(180deg, rgba(90,58,20,0.96) 0%, rgba(62,38,10,0.98) 100%)",
+                    color: "#fffaf1",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.72 }}>
+                    Daily Mode
+                  </div>
+                  <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
+                    Hard
+                  </div>
+                  <div style={{ marginTop: "6px", fontSize: "13px", color: "rgba(255,250,241,0.82)", lineHeight: 1.35 }}>
+                    The tougher daily track.
+                  </div>
+                </button>
+              </div>
+            )}
+
             {statsPanel}
             {archivePanel}
           </div>
@@ -1762,22 +1823,37 @@ export default function Home() {
               marginBottom: "8px",
             }}
           >
-            <button
-              onClick={goHome}
-              style={{
-                padding: "8px 14px",
-                fontSize: "13px",
-                borderRadius: "999px",
-                border: "1px solid rgba(123, 98, 65, 0.18)",
-                backgroundColor: "rgba(255,250,240,0.92)",
-                cursor: "pointer",
-                color: "#2f2419",
-                fontWeight: 800,
-                boxShadow: "0 8px 18px rgba(78, 56, 28, 0.06)",
-              }}
-            >
-              Home
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <button
+                onClick={goHome}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: "13px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.18)",
+                  backgroundColor: "rgba(255,250,240,0.92)",
+                  cursor: "pointer",
+                  color: "#2f2419",
+                  fontWeight: 800,
+                  boxShadow: "0 8px 18px rgba(78, 56, 28, 0.06)",
+                }}
+              >
+                Home
+              </button>
+              <span
+                style={{
+                  padding: "7px 10px",
+                  fontSize: "12px",
+                  borderRadius: "999px",
+                  backgroundColor: selectedMode === "hard" ? "rgba(90,58,20,0.96)" : "rgba(219,233,255,0.96)",
+                  color: selectedMode === "hard" ? "#fffaf1" : "#26456e",
+                  fontWeight: 800,
+                  textTransform: "capitalize",
+                }}
+              >
+                {selectedMode}
+              </span>
+            </div>
             <button
               onClick={() => setShowTutorial(true)}
               style={{
@@ -1823,7 +1899,7 @@ export default function Home() {
               Daily Word Game
             </h1>
             <p style={{ margin: 0, fontSize: isCompactMobile ? "12px" : "15px", color: "#6d5537" }}>
-              Puzzle date: <strong>{puzzle.date}</strong>
+              Puzzle date: <strong>{puzzle.date}</strong> · <strong style={{ textTransform: "capitalize" }}>{selectedMode}</strong> mode
             </p>
           </div>
 
