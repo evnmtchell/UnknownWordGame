@@ -116,6 +116,10 @@ function moveItemToIndex<T>(items: T[], fromIndex: number, toIndex: number) {
   return copy
 }
 
+function getBoardCellKey(row: number, col: number) {
+  return `${row}-${col}`
+}
+
 function getLocalDateString() {
   return new Intl.DateTimeFormat("en-CA").format(new Date())
 }
@@ -276,9 +280,26 @@ export default function Home() {
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
   const statsUpdatedRef = useRef(false)
-
-  const filledCells = puzzle.filledCells
-  const bonusCells = puzzle.bonusCells
+  const fixedCellsMap = useMemo(
+    () => new Map(puzzle.filledCells.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.letter])),
+    [puzzle.filledCells]
+  )
+  const placedTilesMap = useMemo(
+    () => new Map(placedTiles.map((tile) => [getBoardCellKey(tile.row, tile.col), tile])),
+    [placedTiles]
+  )
+  const bonusCellsMap = useMemo(
+    () => new Map(puzzle.bonusCells.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.type])),
+    [puzzle.bonusCells]
+  )
+  const optimalCellSet = useMemo(
+    () => new Set(solution.bestPlacement.map((cell) => getBoardCellKey(cell.row, cell.col))),
+    [solution.bestPlacement]
+  )
+  const optimalLetterMap = useMemo(
+    () => new Map(solution.bestPlacement.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.letter])),
+    [solution.bestPlacement]
+  )
 
   function playPlacementSound() {
     if (typeof window === "undefined") return
@@ -504,14 +525,11 @@ export default function Home() {
   ])
 
   function getFixedCellLetter(row: number, col: number) {
-    const fixedCell = filledCells.find(
-      (item) => item.row === row && item.col === col
-    )
-    return fixedCell ? fixedCell.letter : ""
+    return fixedCellsMap.get(getBoardCellKey(row, col)) || ""
   }
 
   function getPlacedTile(row: number, col: number) {
-    return placedTiles.find((item) => item.row === row && item.col === col)
+    return placedTilesMap.get(getBoardCellKey(row, col))
   }
 
   function getPlacedCellLetter(row: number, col: number) {
@@ -528,11 +546,11 @@ export default function Home() {
   }
 
   function getBonusAt(row: number, col: number): BonusType | undefined {
-    return bonusCells.find((cell) => cell.row === row && cell.col === col)?.type
+    return bonusCellsMap.get(getBoardCellKey(row, col))
   }
 
   function isOptimalCell(row: number, col: number) {
-    return solution.bestPlacement.some((p) => p.row === row && p.col === col)
+    return optimalCellSet.has(getBoardCellKey(row, col))
   }
 
   function getCellBackground(row: number, col: number, hasLetter: boolean) {
@@ -983,6 +1001,39 @@ export default function Home() {
     return total * wordMultiplier
   }
 
+  function getWordOutlineStyle(row: number, col: number, highlightedCells: Set<string>) {
+    const cellKey = getBoardCellKey(row, col)
+
+    if (!highlightedCells.has(cellKey)) {
+      return {
+        top: false,
+        right: false,
+        bottom: false,
+        left: false,
+        topLeftRadius: false,
+        topRightRadius: false,
+        bottomLeftRadius: false,
+        bottomRightRadius: false,
+      }
+    }
+
+    const top = !highlightedCells.has(getBoardCellKey(row - 1, col))
+    const right = !highlightedCells.has(getBoardCellKey(row, col + 1))
+    const bottom = !highlightedCells.has(getBoardCellKey(row + 1, col))
+    const left = !highlightedCells.has(getBoardCellKey(row, col - 1))
+
+    return {
+      top,
+      right,
+      bottom,
+      left,
+      topLeftRadius: top && left,
+      topRightRadius: top && right,
+      bottomLeftRadius: bottom && left,
+      bottomRightRadius: bottom && right,
+    }
+  }
+
   function getAllWordPreviews() {
     if (placedTiles.length === 0) return []
 
@@ -992,16 +1043,8 @@ export default function Home() {
     const mainDirection = getMoveDirection()
     if (!mainDirection) return []
 
-    const mainWord = buildWordAt(
-      placedTiles[0].row,
-      placedTiles[0].col,
-      mainDirection
-    )
-    const mainCells = getWordCells(
-      placedTiles[0].row,
-      placedTiles[0].col,
-      mainDirection
-    )
+    const mainWord = buildWordAt(placedTiles[0].row, placedTiles[0].col, mainDirection)
+    const mainCells = getWordCells(placedTiles[0].row, placedTiles[0].col, mainDirection)
 
     if (mainWord.length > 1 && mainCells.length > 0) {
       const key = `${mainDirection}-${mainCells[0].row}-${mainCells[0].col}-${mainWord}`
@@ -1036,41 +1079,6 @@ export default function Home() {
     }
 
     return results
-  }
-
-  function getWordOutlineStyle(row: number, col: number, previews: WordPreview[]) {
-    const highlightedCells = new Set(
-      previews.flatMap((preview) => preview.cells.map((cell) => `${cell.row}-${cell.col}`))
-    )
-
-    if (!highlightedCells.has(`${row}-${col}`)) {
-      return {
-        top: false,
-        right: false,
-        bottom: false,
-        left: false,
-        topLeftRadius: false,
-        topRightRadius: false,
-        bottomLeftRadius: false,
-        bottomRightRadius: false,
-      }
-    }
-
-    const top = !highlightedCells.has(`${row - 1}-${col}`)
-    const right = !highlightedCells.has(`${row}-${col + 1}`)
-    const bottom = !highlightedCells.has(`${row + 1}-${col}`)
-    const left = !highlightedCells.has(`${row}-${col - 1}`)
-
-    return {
-      top,
-      right,
-      bottom,
-      left,
-      topLeftRadius: top && left,
-      topRightRadius: top && right,
-      bottomLeftRadius: bottom && left,
-      bottomRightRadius: bottom && right,
-    }
   }
 
   function submitMove() {
@@ -1641,8 +1649,21 @@ export default function Home() {
     }
   }
 
-  const allWordPreviews = getAllWordPreviews()
-  const validWordPreviews = allWordPreviews.filter((preview) => VALID_WORDS.has(preview.word))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allWordPreviews = useMemo(() => getAllWordPreviews(), [placedTiles, boardSize, fixedCellsMap, placedTilesMap, bonusCellsMap])
+  const validWordPreviews = useMemo(
+    () => allWordPreviews.filter((preview) => VALID_WORDS.has(preview.word)),
+    [allWordPreviews]
+  )
+  const validWordHighlightCells = useMemo(
+    () =>
+      new Set(
+        validWordPreviews.flatMap((preview) =>
+          preview.cells.map((cell) => getBoardCellKey(cell.row, cell.col))
+        )
+      ),
+    [validWordPreviews]
+  )
   const showLiveScorePreview =
     placedTiles.length > 0 &&
     isTouchingFilledCells() &&
@@ -3171,13 +3192,8 @@ export default function Home() {
                 const col = index % boardSize
                 const letter = getCellLetter(row, col)
                 const placedTile = getPlacedTile(row, col)
-                const validWordOutline = getWordOutlineStyle(row, col, validWordPreviews)
-                const optimalLetter =
-                  gameOver && !letter
-                    ? solution.bestPlacement.find(
-                        (p) => p.row === row && p.col === col
-                      )?.letter ?? ""
-                    : ""
+                const validWordOutline = getWordOutlineStyle(row, col, validWordHighlightCells)
+                const optimalLetter = gameOver && !letter ? optimalLetterMap.get(getBoardCellKey(row, col)) ?? "" : ""
                 const displayLetter = letter || optimalLetter
                 const hasLetter = Boolean(displayLetter)
                 const letterScore = displayLetter
