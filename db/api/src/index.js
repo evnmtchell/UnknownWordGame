@@ -12,11 +12,38 @@ const pool = new Pool({
   password: process.env.POSTGRES_PASSWORD || "lexicon",
 })
 
+const API_KEY = process.env.API_KEY
+const ALLOWED_ORIGINS = [
+  "https://unknown-word-game.pages.dev",
+  "https://lexicon.plantos.co",
+  "http://localhost:3000",
+]
+
 const app = express()
-app.use(cors())
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (health checks, server-to-server)
+    if (!origin) return callback(null, true)
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    callback(new Error("Not allowed by CORS"))
+  },
+  credentials: true,
+}))
+
 app.use(express.json())
 
-// Health check
+// API key middleware for all /api/* routes
+app.use("/api", (req, res, next) => {
+  const key = req.headers["x-api-key"]
+  if (!API_KEY || key === API_KEY) {
+    next()
+  } else {
+    res.status(403).json({ error: "Forbidden" })
+  }
+})
+
+// Health check (no auth required)
 app.get("/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1")

@@ -1,4 +1,5 @@
 const API_BASE = "https://api-lexicon.plantos.co"
+const API_KEY = "lxcn-2026-plantos-db-key-f8a3b1c9d4e7"
 const VISITOR_ID_KEY = "daily-word-game-visitor-id"
 
 function getVisitorId(): string {
@@ -27,7 +28,7 @@ export async function saveSession(data: {
   try {
     await fetch(`${API_BASE}/api/sessions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
       body: JSON.stringify({ ...data, visitor_id: getVisitorId() }),
     })
   } catch {
@@ -48,7 +49,7 @@ export async function saveStats(data: {
   try {
     await fetch(`${API_BASE}/api/stats`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
       body: JSON.stringify({ ...data, visitor_id: getVisitorId() }),
     })
   } catch {
