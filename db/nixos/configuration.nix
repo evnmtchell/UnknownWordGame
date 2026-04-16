@@ -141,7 +141,7 @@
   };
 
   users.users.root.openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtColhFrAdvDR5Yscf81Z7RjhXpr/z8Bbz2NcFdzkqs github-actions@plantos-db"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK4U2sleDkFRb9X8lQrWy4R8YPVwW4epTf0mbnFYQ4CN github-actions@plantos"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHDisG9QHdI88ILuKeHIsGhZRaKsC8OlhXhHjLNnph67 tyler.dennis@plantos.co"
   ];
 
