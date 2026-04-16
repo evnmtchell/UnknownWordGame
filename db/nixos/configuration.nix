@@ -179,8 +179,8 @@
   # 4. CLOUDFLARE TUNNEL
   # ==========================================
   # Configure ingress in the Cloudflare dashboard:
-  #   deploy-db.plantos.co    -> ssh://localhost:22
-  #   api-lexicon.plantos.co  -> http://localhost:3100
+  #   deploy-db.plantos.co     -> ssh://localhost:22
+  #   api-lexicon.plantos.co   -> http://localhost:3100
 
   systemd.services.cloudflared = {
     description = "Cloudflare Tunnel for plantos-db";
