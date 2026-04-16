@@ -1,0 +1,125 @@
+name: Deploy to plantos-db container
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'db/**'
+      - '.github/workflows/deploy-db.yml'
+
+concurrency:
+  group: deploy-db
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect Changed Paths
+        id: changed-files
+        run: |
+          PREV_COMMIT=$(git rev-parse HEAD~1)
+          git diff --name-only $PREV_COMMIT HEAD | grep -E "^db/nixos/" && echo "nixos_changed=true" >> $GITHUB_OUTPUT || echo "nixos_changed=false" >> $GITHUB_OUTPUT
+          git diff --name-only $PREV_COMMIT HEAD | grep -E "^db/migrations/" && echo "migrations_changed=true" >> $GITHUB_OUTPUT || echo "migrations_changed=false" >> $GITHUB_OUTPUT
+
+      - name: Setup SSH Key and Config
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Install cloudflared
+        run: |
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
+      - name: Configure SSH for Cloudflare Access
+        run: |
+          cat > ~/.ssh/config << EOF
+          Host deploy-db.plantos.co
+            HostName deploy-db.plantos.co
+            User root
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ProxyCommand /usr/bin/cloudflared access ssh --hostname %h
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Deploy to Container
+        run: |
+          ssh deploy-db.plantos.co << REMOTESCRIPT
+            set -e
+
+            echo "=== Step 1: Creating directories ==="
+            mkdir -p /etc/nixos/plantos-db /var/lib/secrets /var/lib/backups /root/.ssh
+
+            echo "=== Step 2: Deploying secrets ==="
+            # Deploy borg passphrase for backup encryption
+            echo "${BORG_PASSPHRASE}" > /var/lib/secrets/borg-passphrase
+            chmod 600 /var/lib/secrets/borg-passphrase
+
+            # Deploy SSH key for rsync.net (borgbackup)
+            echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_borg_backup
+            chmod 600 /root/.ssh/id_borg_backup
+
+            # Setup SSH config for rsync.net
+            printf '%s' 'SG9zdCAqLnJzeW5jLm5ldAogIFVzZXIgZm0yODYyCiAgSWRlbnRpdHlGaWxlIC9yb290Ly5zc2gvaWRfYm9yZ19iYWNrdXAKICBTdHJpY3RIb3N0S2V5Q2hlY2tpbmcgYWNjZXB0LW5ldwo=' | base64 -d > /root/.ssh/config
+            chmod 600 /root/.ssh/config
+
+            # Deploy PostgreSQL password
+            echo "POSTGRES_PASSWORD=${LEXICON_DB_PASSWORD}" > /var/lib/secrets/plantos-db.env
+            chmod 600 /var/lib/secrets/plantos-db.env
+
+            # Update the PostgreSQL user password if DB is already running
+            if command -v psql &> /dev/null && pg_isready -q 2>/dev/null; then
+              psql -U postgres -c "ALTER ROLE lexicon WITH PASSWORD '${LEXICON_DB_PASSWORD}';" 2>/dev/null || true
+            fi
+
+            echo "Secrets deployed"
+
+            echo "=== Step 3: Updating repository ==="
+            if [ -d /etc/nixos/plantos-db/.git ]; then
+              cd /etc/nixos/plantos-db
+              git config pull.rebase true
+              git fetch origin main
+              git reset --hard origin/main
+            else
+              cd /etc/nixos
+              rm -rf plantos-db
+              git clone https://github.com/evnmtchell/UnknownWordGame.git plantos-db
+            fi
+
+            echo "=== Step 4: Copying configuration ==="
+            cp /etc/nixos/plantos-db/db/nixos/*.nix /etc/nixos/
+
+            echo "=== Step 5: Rebuilding NixOS ==="
+            cd /etc/nixos
+            nixos-rebuild switch || exit 1
+            echo "NixOS rebuilt"
+
+            echo "=== Step 6: Running Migrations ==="
+            systemctl restart lexicon-migrations
+            sleep 3
+            echo "Migrations applied"
+
+            echo "DEPLOYMENT SUCCESSFUL"
+          REMOTESCRIPT
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          BORG_PASSPHRASE: ${{ secrets.BORG_PASSPHRASE }}
+          LEXICON_DB_PASSWORD: ${{ secrets.LEXICON_DB_PASSWORD }}
+
+      - name: Verify Database
+        if: success()
+        run: |
+          ssh deploy-db.plantos.co << 'VERIFY_SCRIPT'
+            pg_isready -q && echo "PostgreSQL is running" || echo "PostgreSQL check failed"
+            psql -U lexicon -d lexicon -c "SELECT count(*) FROM _migrations;" 2>/dev/null && echo "Migrations table accessible" || echo "DB not yet initialized"
+          VERIFY_SCRIPT
