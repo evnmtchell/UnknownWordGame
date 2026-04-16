@@ -103,7 +103,7 @@ jobs:
 
             echo "=== Step 5: Rebuilding NixOS ==="
             cd /etc/nixos
-            nixos-rebuild switch || exit 1
+            nixos-rebuild switch --flake /etc/nixos#plantos-db --option sandbox false || exit 1
             echo "NixOS rebuilt"
 
             echo "=== Step 6: Installing API dependencies ==="
