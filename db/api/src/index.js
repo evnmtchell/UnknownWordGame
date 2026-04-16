@@ -59,6 +59,45 @@ app.get("/api/puzzles/:date", async (req, res) => {
   }
 })
 
+// POST /api/puzzles — insert/update a puzzle
+app.post("/api/puzzles", async (req, res) => {
+  const body = req.body
+
+  if (!body.date || !body.mode) {
+    return res.status(400).json({ error: "date and mode required" })
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO puzzles (date, mode, board_size, rack, filled_cells, bonus_cells, optimal_score, optimal_words)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (date, mode)
+       DO UPDATE SET
+         board_size = $3,
+         rack = $4,
+         filled_cells = $5,
+         bonus_cells = $6,
+         optimal_score = $7,
+         optimal_words = $8
+       RETURNING *`,
+      [
+        body.date,
+        body.mode,
+        body.board_size,
+        JSON.stringify(body.rack),
+        JSON.stringify(body.filled_cells),
+        JSON.stringify(body.bonus_cells),
+        body.optimal_score,
+        JSON.stringify(body.optimal_words),
+      ]
+    )
+
+    res.json(rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/sessions — load game session
 app.get("/api/sessions", async (req, res) => {
   const { visitor_id, date, mode } = req.query
