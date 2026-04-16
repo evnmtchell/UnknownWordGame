@@ -5,7 +5,7 @@ import { VALID_WORDS } from "./words"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
-import { saveSession, saveStats } from "./api-client"
+import { saveSession, saveStats, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -371,6 +371,14 @@ export default function Home() {
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
   const statsUpdatedRef = useRef(false)
+  const [showAuth, setShowAuth] = useState(false)
+  const [authMode, setAuthMode] = useState<"login" | "register">("login")
+  const [authUsername, setAuthUsername] = useState("")
+  const [authEmail, setAuthEmail] = useState("")
+  const [authPassword, setAuthPassword] = useState("")
+  const [authError, setAuthError] = useState("")
+  const [authLoading, setAuthLoading] = useState(false)
+  const [currentUser, setCurrentUser] = useState<{ username: string; anon: boolean } | null>(null)
   const fixedCellsMap = useMemo(
     () => new Map(puzzle.filledCells.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.letter])),
     [puzzle.filledCells]
@@ -467,6 +475,10 @@ export default function Home() {
 
   useEffect(() => {
     setHasMounted(true)
+    const auth = getAuthState()
+    if (auth) {
+      setCurrentUser({ username: auth.username, anon: auth.anon })
+    }
   }, [])
 
   useEffect(() => {
@@ -1520,6 +1532,34 @@ export default function Home() {
   function dismissTutorial() {
     setShowTutorial(false)
     localStorage.setItem("daily-word-game-tutorial-seen", "1")
+  }
+
+  async function handleAuth() {
+    setAuthError("")
+    setAuthLoading(true)
+    try {
+      if (authMode === "login") {
+        const auth = await apiLogin(authUsername, authPassword)
+        setCurrentUser({ username: auth.username, anon: false })
+      } else {
+        const auth = await apiRegister(authUsername, authEmail, authPassword)
+        setCurrentUser({ username: auth.username, anon: false })
+      }
+      setShowAuth(false)
+      setAuthUsername("")
+      setAuthEmail("")
+      setAuthPassword("")
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  function handleLogout() {
+    apiLogout()
+    setCurrentUser(null)
+    setShowAuth(false)
   }
 
   function selectPuzzleDate(date: string, mode: "easy" | "hard" = selectedMode) {
@@ -4631,6 +4671,189 @@ export default function Home() {
                 </div>
               </button>
             ))}
+
+            <div style={{ borderTop: "1px solid rgba(123, 98, 65, 0.12)", marginTop: "6px", paddingTop: "14px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 800, color: "#6d5537", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>Account</div>
+              {currentUser && !currentUser.anon ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: "16px", fontWeight: 800 }}>{currentUser.username}</div>
+                    <div style={{ fontSize: "13px", color: "#6d5537", marginTop: "2px" }}>Signed in</div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: "8px",
+                      border: "1px solid rgba(123, 98, 65, 0.2)",
+                      backgroundColor: "#f5ead6",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#2f2419",
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setShowSettings(false); setShowAuth(true); setAuthMode("login"); setAuthError(""); }}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(123, 98, 65, 0.2)",
+                    backgroundColor: "#2f2419",
+                    cursor: "pointer",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    color: "#fffaf0",
+                  }}
+                >
+                  Sign in to sync progress
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAuth && (
+        <div
+          onClick={() => setShowAuth(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10002,
+            padding: "16px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: "#fffaf0",
+              borderRadius: "18px",
+              padding: isCompactMobile ? "20px 18px" : "24px",
+              maxWidth: "400px",
+              width: "100%",
+              border: "1px solid rgba(123, 98, 65, 0.18)",
+              boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
+              color: "#2f2419",
+              animation: reducedMotionEnabled ? undefined : "pop-in-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
+              <h2 style={{ margin: 0, fontSize: "22px" }}>{authMode === "login" ? "Sign In" : "Create Account"}</h2>
+              <button
+                onClick={() => setShowAuth(false)}
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.16)",
+                  backgroundColor: "#f5ead6",
+                  cursor: "pointer",
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  color: "#2f2419",
+                }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <input
+                type="text"
+                placeholder="Username"
+                value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)}
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(123, 98, 65, 0.25)",
+                  backgroundColor: "#fff",
+                  fontSize: "16px",
+                  color: "#2f2419",
+                  outline: "none",
+                }}
+              />
+              {authMode === "register" && (
+                <input
+                  type="email"
+                  placeholder="Email (optional)"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(123, 98, 65, 0.25)",
+                    backgroundColor: "#fff",
+                    fontSize: "16px",
+                    color: "#2f2419",
+                    outline: "none",
+                  }}
+                />
+              )}
+              <input
+                type="password"
+                placeholder="Password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleAuth() }}
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(123, 98, 65, 0.25)",
+                  backgroundColor: "#fff",
+                  fontSize: "16px",
+                  color: "#2f2419",
+                  outline: "none",
+                }}
+              />
+
+              {authError && (
+                <div style={{ fontSize: "14px", color: "#c0392b", fontWeight: 600 }}>{authError}</div>
+              )}
+
+              <button
+                onClick={handleAuth}
+                disabled={authLoading || !authUsername || !authPassword}
+                style={{
+                  padding: "14px",
+                  borderRadius: "10px",
+                  border: "none",
+                  backgroundColor: authLoading || !authUsername || !authPassword ? "#c8b68f" : "#2f2419",
+                  cursor: authLoading ? "wait" : "pointer",
+                  fontSize: "16px",
+                  fontWeight: 700,
+                  color: "#fffaf0",
+                }}
+              >
+                {authLoading ? "..." : authMode === "login" ? "Sign In" : "Create Account"}
+              </button>
+
+              <button
+                onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthError(""); }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  color: "#6d5537",
+                  textDecoration: "underline",
+                  padding: "4px",
+                }}
+              >
+                {authMode === "login" ? "Need an account? Register" : "Already have an account? Sign in"}
+              </button>
+            </div>
           </div>
         </div>
       )}
