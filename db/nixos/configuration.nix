@@ -51,7 +51,7 @@
     package = pkgs.postgresql_15;
 
     settings = {
-      listen_addresses = "*";
+      listen_addresses = pkgs.lib.mkForce "*";
       max_connections = 100;
       shared_buffers = "128MB";
       effective_cache_size = "256MB";
