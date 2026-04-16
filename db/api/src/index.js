@@ -132,9 +132,9 @@ app.post("/api/sessions", async (req, res) => {
     // Ensure visitor exists in users table
     await pool.query(
       `INSERT INTO users (id, username)
-       VALUES ($1, $1)
+       VALUES ($1::uuid, $2)
        ON CONFLICT (id) DO NOTHING`,
-      [body.visitor_id]
+      [body.visitor_id, body.visitor_id]
     )
 
     // Get puzzle id

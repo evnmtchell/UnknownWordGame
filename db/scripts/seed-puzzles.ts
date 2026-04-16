@@ -20,8 +20,8 @@ async function seedPuzzles() {
         rack: puzzle.rack,
         filled_cells: puzzle.filledCells,
         bonus_cells: puzzle.bonusCells,
-        optimal_score: solution.score,
-        optimal_words: solution.words,
+        optimal_score: solution.bestScore || 0,
+        optimal_words: solution.bestWords || [],
       }
 
       try {
