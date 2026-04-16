@@ -2734,8 +2734,12 @@ export default function Home() {
 
               <button
                 onClick={() => {
-                  setShowArchive((prev) => !prev)
-                  setShowStats(false)
+                  if (!currentUser || currentUser.anon) {
+                    setShowAuth(true); setAuthMode("login"); setAuthError("")
+                  } else {
+                    setShowArchive((prev) => !prev)
+                    setShowStats(false)
+                  }
                 }}
                 style={homeActionButtonStyle}
               >
@@ -2749,8 +2753,12 @@ export default function Home() {
 
               <button
                 onClick={() => {
-                  setShowStats((prev) => !prev)
-                  setShowArchive(false)
+                  if (!currentUser || currentUser.anon) {
+                    setShowAuth(true); setAuthMode("login"); setAuthError("")
+                  } else {
+                    setShowStats((prev) => !prev)
+                    setShowArchive(false)
+                  }
                 }}
                 style={homeActionButtonStyle}
               >
@@ -2982,6 +2990,29 @@ export default function Home() {
                 <br />
                 Pick your track and play.
               </div>
+
+              {(!currentUser || currentUser.anon) ? (
+                <button
+                  onClick={() => { setShowAuth(true); setAuthMode("login"); setAuthError(""); }}
+                  style={{
+                    marginTop: "16px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: isCompactMobile ? "14px" : "15px",
+                    color: "#6d5537",
+                    textDecoration: "underline",
+                    fontWeight: 700,
+                    padding: "4px",
+                  }}
+                >
+                  Sign in to save progress
+                </button>
+              ) : (
+                <div style={{ marginTop: "16px", fontSize: isCompactMobile ? "14px" : "15px", color: "#6d5537", fontWeight: 700 }}>
+                  Playing as {currentUser.username}
+                </div>
+              )}
             </div>
 
             <button
@@ -4401,6 +4432,30 @@ export default function Home() {
                       >
                         Settings
                       </button>
+
+                      {(!currentUser || currentUser.anon) && (
+                        <button
+                          onClick={() => {
+                            setShowAuth(true)
+                            setAuthMode("login")
+                            setAuthError("")
+                            setShowMoreActions(false)
+                          }}
+                          style={{
+                            padding: "10px 12px",
+                            fontSize: "14px",
+                            borderRadius: "14px",
+                            border: "1px solid rgba(122, 173, 42, 0.3)",
+                            backgroundColor: "rgba(122, 173, 42, 0.12)",
+                            cursor: "pointer",
+                            color: "#2f2419",
+                            fontWeight: 700,
+                            textAlign: "left",
+                          }}
+                        >
+                          Sign In
+                        </button>
+                      )}
 
                       <button
                         onClick={() => {
