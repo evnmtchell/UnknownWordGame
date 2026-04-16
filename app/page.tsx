@@ -2761,37 +2761,27 @@ export default function Home() {
                   {showStats ? "Hide Stats" : "View Stats"}
                 </div>
               </button>
-            </div>
 
-            <button
-              onClick={() => {
-                if (currentUser && !currentUser.anon) {
-                  setShowSettings(true)
-                } else {
-                  setShowAuth(true)
-                  setAuthMode("login")
-                  setAuthError("")
-                }
-              }}
-              style={{
-                width: "100%",
-                padding: isCompactMobile ? "16px 18px" : "20px 22px",
-                borderRadius: "16px",
-                border: "1px solid rgba(123, 98, 65, 0.12)",
-                backgroundColor: currentUser && !currentUser.anon ? "rgba(122, 173, 42, 0.1)" : "rgba(255,250,240,0.8)",
-                cursor: "pointer",
-                textAlign: "left",
-                color: "#2f2419",
-                marginTop: "8px",
-              }}
-            >
-              <div style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1.2px", color: "#8a7a5a" }}>
-                ACCOUNT
-              </div>
-              <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                {currentUser && !currentUser.anon ? currentUser.username : "Sign In"}
-              </div>
-            </button>
+              <button
+                onClick={() => {
+                  if (currentUser && !currentUser.anon) {
+                    setShowSettings(true)
+                  } else {
+                    setShowAuth(true)
+                    setAuthMode("login")
+                    setAuthError("")
+                  }
+                }}
+                style={homeActionButtonStyle}
+              >
+                <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
+                  Account
+                </div>
+                <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
+                  {currentUser && !currentUser.anon ? currentUser.username : "Sign In"}
+                </div>
+              </button>
+            </div>
 
             {statsPanel}
             {archivePanel}
