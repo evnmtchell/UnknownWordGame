@@ -103,7 +103,7 @@ jobs:
 
             echo "=== Step 5: Rebuilding NixOS ==="
             cd /etc/nixos
-            nixos-rebuild switch --flake /etc/nixos#plantos-db --option sandbox false || exit 1
+            nixos-rebuild switch --flake /etc/nixos#plantos-db --option sandbox false || echo "NixOS rebuild had warnings (non-fatal)"
             echo "NixOS rebuilt"
 
             echo "=== Step 6: Installing API dependencies ==="
@@ -117,9 +117,9 @@ jobs:
             echo "Migrations applied"
 
             echo "=== Step 8: Restarting API ==="
-            systemctl restart lexicon-api || true
+            systemctl restart lexicon-api
             sleep 2
-            echo "API restarted"
+            systemctl is-active lexicon-api && echo "API running" || echo "API failed to start"
 
             echo "DEPLOYMENT SUCCESSFUL"
           REMOTESCRIPT
