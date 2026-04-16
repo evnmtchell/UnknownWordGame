@@ -1,15 +1,151 @@
 const API_BASE = "https://api-lexicon.plantos.co"
-const API_KEY = "lxcn-2026-plantos-db-key-f8a3b1c9d4e7"
-const VISITOR_ID_KEY = "daily-word-game-visitor-id"
+const TOKEN_KEY = "lexicon-auth-token"
+const USER_KEY = "lexicon-auth-user"
 
-function getVisitorId(): string {
-  let id = localStorage.getItem(VISITOR_ID_KEY)
-  if (!id) {
-    id = crypto.randomUUID()
-    localStorage.setItem(VISITOR_ID_KEY, id)
-  }
-  return id
+type AuthState = {
+  token: string
+  user_id: string
+  username: string
+  anon: boolean
 }
+
+let authState: AuthState | null = null
+
+function getStoredAuth(): AuthState | null {
+  if (authState) return authState
+  try {
+    const stored = localStorage.getItem(TOKEN_KEY)
+    if (stored) {
+      authState = JSON.parse(stored)
+      return authState
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function storeAuth(auth: AuthState) {
+  authState = auth
+  localStorage.setItem(TOKEN_KEY, JSON.stringify(auth))
+}
+
+function clearAuth() {
+  authState = null
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+async function ensureAuth(): Promise<AuthState> {
+  const existing = getStoredAuth()
+  if (existing) return existing
+
+  // Get anonymous token
+  const res = await fetch(`${API_BASE}/auth/token`)
+  if (!res.ok) throw new Error("Failed to get auth token")
+  const data = await res.json()
+  const auth: AuthState = {
+    token: data.token,
+    user_id: data.user_id,
+    username: data.username,
+    anon: data.anon,
+  }
+  storeAuth(auth)
+  return auth
+}
+
+async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const auth = await ensureAuth()
+  const headers = {
+    ...options.headers as Record<string, string>,
+    Authorization: `Bearer ${auth.token}`,
+  }
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+
+  // If token expired, get a new one and retry once
+  if (res.status === 401) {
+    clearAuth()
+    const newAuth = await ensureAuth()
+    const retryHeaders = {
+      ...options.headers as Record<string, string>,
+      Authorization: `Bearer ${newAuth.token}`,
+    }
+    return fetch(`${API_BASE}${path}`, { ...options, headers: retryHeaders })
+  }
+
+  return res
+}
+
+// ==========================================
+// AUTH FUNCTIONS
+// ==========================================
+
+export async function register(username: string, email: string, password: string): Promise<AuthState> {
+  const auth = getStoredAuth()
+  const endpoint = auth?.anon ? "/auth/upgrade" : "/auth/register"
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (auth?.token) headers.Authorization = `Bearer ${auth.token}`
+
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ username, email, password }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || "Registration failed")
+  }
+
+  const data = await res.json()
+  const newAuth: AuthState = {
+    token: data.token,
+    user_id: data.user_id,
+    username: data.username,
+    anon: false,
+  }
+  storeAuth(newAuth)
+  return newAuth
+}
+
+export async function login(username: string, password: string): Promise<AuthState> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || "Login failed")
+  }
+
+  const data = await res.json()
+  const newAuth: AuthState = {
+    token: data.token,
+    user_id: data.user_id,
+    username: data.username,
+    anon: false,
+  }
+  storeAuth(newAuth)
+  return newAuth
+}
+
+export function logout() {
+  clearAuth()
+}
+
+export function getAuthState(): AuthState | null {
+  return getStoredAuth()
+}
+
+export function isLoggedIn(): boolean {
+  const auth = getStoredAuth()
+  return auth !== null && !auth.anon
+}
+
+// ==========================================
+// DATA FUNCTIONS
+// ==========================================
 
 export async function saveSession(data: {
   date: string
@@ -26,10 +162,10 @@ export async function saveSession(data: {
   message: string
 }): Promise<void> {
   try {
-    await fetch(`${API_BASE}/api/sessions`, {
+    await authFetch("/api/sessions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-      body: JSON.stringify({ ...data, visitor_id: getVisitorId() }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     })
   } catch {
     // Silent fail — localStorage is the primary store for now
@@ -47,10 +183,10 @@ export async function saveStats(data: {
   rating_counts: Record<string, number>
 }): Promise<void> {
   try {
-    await fetch(`${API_BASE}/api/stats`, {
+    await authFetch("/api/stats", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-      body: JSON.stringify({ ...data, visitor_id: getVisitorId() }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     })
   } catch {
     // Silent fail — localStorage is the primary store for now

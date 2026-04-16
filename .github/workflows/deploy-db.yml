@@ -75,9 +75,9 @@ jobs:
             printf '%s' 'SG9zdCAqLnJzeW5jLm5ldAogIFVzZXIgZm0yODYyCiAgSWRlbnRpdHlGaWxlIC9yb290Ly5zc2gvaWRfYm9yZ19iYWNrdXAKICBTdHJpY3RIb3N0S2V5Q2hlY2tpbmcgYWNjZXB0LW5ldwo=' | base64 -d > /root/.ssh/config
             chmod 600 /root/.ssh/config
 
-            # Deploy PostgreSQL password and API key
+            # Deploy secrets
             echo "POSTGRES_PASSWORD=${LEXICON_DB_PASSWORD}" > /var/lib/secrets/plantos-db.env
-            echo "API_KEY=${LEXICON_API_KEY}" >> /var/lib/secrets/plantos-db.env
+            echo "JWT_SECRET=${LEXICON_JWT_SECRET}" >> /var/lib/secrets/plantos-db.env
             chmod 600 /var/lib/secrets/plantos-db.env
 
             # Update the PostgreSQL user password if DB is already running
@@ -128,7 +128,7 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           BORG_PASSPHRASE: ${{ secrets.BORG_PASSPHRASE }}
           LEXICON_DB_PASSWORD: ${{ secrets.LEXICON_DB_PASSWORD }}
-          LEXICON_API_KEY: ${{ secrets.LEXICON_API_KEY }}
+          LEXICON_JWT_SECRET: ${{ secrets.LEXICON_JWT_SECRET }}
 
       - name: Verify Database
         if: success()
