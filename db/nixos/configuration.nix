@@ -2,7 +2,7 @@
 
 {
   # ==========================================
-  # 0. IMPORTS (Required for LXC Container)
+  # 0. IMPORTS (Incus LXC Container)
   # ==========================================
   imports = [ ./incus.nix ];
 
