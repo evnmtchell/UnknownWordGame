@@ -5,6 +5,7 @@ import { VALID_WORDS } from "./words"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
+import { saveSession, saveStats } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -707,6 +708,22 @@ export default function Home() {
     }
 
     localStorage.setItem(storageKey, JSON.stringify(dataToSave))
+
+    // Dual-write to database
+    saveSession({
+      date: puzzle.date,
+      mode: loadedGameConfig.mode,
+      attempts_left: attemptsLeft,
+      best_score: bestScore,
+      attempt_history: attemptHistory,
+      hint_used: hintLevel > 0,
+      hint_level: hintLevel,
+      completed: attemptsLeft === 0,
+      rating: null,
+      submitted_words: submittedWords,
+      submitted_score: submittedScore,
+      message,
+    })
   }, [
     attemptsLeft,
     bestScore,
@@ -717,6 +734,8 @@ export default function Home() {
     hintLevel,
     storageKey,
     hasLoadedSave,
+    puzzle.date,
+    loadedGameConfig.mode,
   ])
 
   function getFixedCellLetter(row: number, col: number) {
@@ -1481,6 +1500,18 @@ export default function Home() {
 
       localStorage.setItem(STATS_KEY, JSON.stringify(newStats))
       setStats(newStats)
+
+      // Dual-write to database
+      saveStats({
+        games_played: newStats.gamesPlayed,
+        current_streak: newStats.currentStreak,
+        max_streak: newStats.maxStreak,
+        perfect_current_streak: newStats.perfectCurrentStreak,
+        perfect_max_streak: newStats.perfectMaxStreak,
+        last_played_date: newStats.lastPlayedDate,
+        last_perfect_date: newStats.lastPerfectDate,
+        rating_counts: newStats.ratingCounts,
+      })
     } catch {
       // ignore
     }

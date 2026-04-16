@@ -99,15 +99,25 @@ jobs:
             echo "=== Step 4: Copying configuration ==="
             cp /etc/nixos/plantos-db/db/nixos/*.nix /etc/nixos/
 
-            echo "=== Step 5: Rebuilding NixOS ==="
+            echo "=== Step 5: Installing API dependencies ==="
+            cd /etc/nixos/plantos-db/db/api
+            npm install --production
+            echo "API dependencies installed"
+
+            echo "=== Step 6: Rebuilding NixOS ==="
             cd /etc/nixos
             nixos-rebuild switch || exit 1
             echo "NixOS rebuilt"
 
-            echo "=== Step 6: Running Migrations ==="
+            echo "=== Step 7: Running Migrations ==="
             systemctl restart lexicon-migrations
             sleep 3
             echo "Migrations applied"
+
+            echo "=== Step 8: Restarting API ==="
+            systemctl restart lexicon-api || true
+            sleep 2
+            echo "API restarted"
 
             echo "DEPLOYMENT SUCCESSFUL"
           REMOTESCRIPT
@@ -122,4 +132,5 @@ jobs:
           ssh deploy-db.plantos.co << 'VERIFY_SCRIPT'
             pg_isready -q && echo "PostgreSQL is running" || echo "PostgreSQL check failed"
             psql -U lexicon -d lexicon -c "SELECT count(*) FROM _migrations;" 2>/dev/null && echo "Migrations table accessible" || echo "DB not yet initialized"
+            curl -s http://localhost:3100/health && echo " API healthy" || echo "API check failed"
           VERIFY_SCRIPT

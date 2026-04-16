@@ -147,15 +147,40 @@
 
   networking.firewall = {
     enable = true;
-    allowedTCPPorts = [ 22 5432 ];
+    allowedTCPPorts = [ 22 3100 5432 ];
     allowPing = true;
+  };
+
+  # ==========================================
+  # LEXICON API SERVICE
+  # ==========================================
+
+  systemd.services.lexicon-api = {
+    description = "Lexicon API Server";
+    after = [ "postgresql.service" "network.target" ];
+    requires = [ "postgresql.service" ];
+    wantedBy = [ "multi-user.target" ];
+    path = [ pkgs.nodejs_20 ];
+    environment = {
+      NODE_ENV = "production";
+      PORT = "3100";
+    };
+    serviceConfig = {
+      Type = "simple";
+      WorkingDirectory = "/etc/nixos/plantos-db/db/api";
+      EnvironmentFile = "/var/lib/secrets/plantos-db.env";
+      ExecStart = "${pkgs.nodejs_20}/bin/node src/index.js";
+      Restart = "always";
+      RestartSec = 10;
+    };
   };
 
   # ==========================================
   # 4. CLOUDFLARE TUNNEL
   # ==========================================
   # Configure ingress in the Cloudflare dashboard:
-  #   deploy-db.plantos.co -> ssh://localhost:22
+  #   deploy-db.plantos.co    -> ssh://localhost:22
+  #   api-lexicon.plantos.co  -> http://localhost:3100
 
   systemd.services.cloudflared = {
     description = "Cloudflare Tunnel for plantos-db";
@@ -239,6 +264,7 @@
     htop
     curl
     wget
+    nodejs_20
     borgbackup
     netbird
     cloudflared

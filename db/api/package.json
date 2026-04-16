@@ -1,0 +1,14 @@
+{
+  "name": "lexicon-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.13.0",
+    "cors": "^2.8.5"
+  }
+}
