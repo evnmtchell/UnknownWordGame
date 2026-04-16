@@ -15,20 +15,21 @@ type SolverResult = {
   bestPlacement: PlacedCell[]
 }
 
-function getFixedLetter(
-  filledCells: DailyPuzzle["filledCells"],
-  row: number,
-  col: number
-) {
-  return filledCells.find((c) => c.row === row && c.col === col)?.letter || ""
+const solverCache = new Map<string, SolverResult>()
+
+function getCellKey(row: number, col: number) {
+  return `${row},${col}`
 }
 
-function getBonusAt(
-  bonusCells: DailyPuzzle["bonusCells"],
-  row: number,
-  col: number
-): BonusType | undefined {
-  return bonusCells.find((c) => c.row === row && c.col === col)?.type
+function getPuzzleCacheKey(puzzle: DailyPuzzle) {
+  return [
+    puzzle.id,
+    puzzle.date,
+    puzzle.boardSize,
+    puzzle.rack.join(""),
+    puzzle.filledCells.map((cell) => `${cell.row},${cell.col},${cell.letter}`).join("|"),
+    puzzle.bonusCells.map((cell) => `${cell.row},${cell.col},${cell.type}`).join("|"),
+  ].join("::")
 }
 
 function countLetters(letters: string[]) {
@@ -39,8 +40,84 @@ function countLetters(letters: string[]) {
   return map
 }
 
+function getBoardLetter(
+  filledMap: Map<string, string>,
+  placedMap: Map<string, PlacedCell>,
+  row: number,
+  col: number
+) {
+  return placedMap.get(getCellKey(row, col))?.letter ?? filledMap.get(getCellKey(row, col)) ?? ""
+}
+
+function getWordCellsFromBoard(
+  puzzle: DailyPuzzle,
+  filledMap: Map<string, string>,
+  placedMap: Map<string, PlacedCell>,
+  row: number,
+  col: number,
+  direction: "row" | "col"
+) {
+  const cells: Array<PlacedCell & { isNew: boolean }> = []
+
+  let startRow = row
+  let endRow = row
+  let startCol = col
+  let endCol = col
+
+  if (direction === "row") {
+    while (startCol > 0 && getBoardLetter(filledMap, placedMap, row, startCol - 1)) startCol--
+    while (
+      endCol < puzzle.boardSize - 1 &&
+      getBoardLetter(filledMap, placedMap, row, endCol + 1)
+    ) {
+      endCol++
+    }
+
+    for (let currentCol = startCol; currentCol <= endCol; currentCol++) {
+      const key = getCellKey(row, currentCol)
+      const placedCell = placedMap.get(key)
+      const letter = getBoardLetter(filledMap, placedMap, row, currentCol)
+      if (!letter) return []
+      cells.push({
+        row,
+        col: currentCol,
+        letter,
+        isBlank: placedCell?.isBlank ?? false,
+        isNew: Boolean(placedCell),
+      })
+    }
+
+    return cells
+  }
+
+  while (startRow > 0 && getBoardLetter(filledMap, placedMap, startRow - 1, col)) startRow--
+  while (
+    endRow < puzzle.boardSize - 1 &&
+    getBoardLetter(filledMap, placedMap, endRow + 1, col)
+  ) {
+    endRow++
+  }
+
+  for (let currentRow = startRow; currentRow <= endRow; currentRow++) {
+    const key = getCellKey(currentRow, col)
+    const placedCell = placedMap.get(key)
+    const letter = getBoardLetter(filledMap, placedMap, currentRow, col)
+    if (!letter) return []
+    cells.push({
+      row: currentRow,
+      col,
+      letter,
+      isBlank: placedCell?.isBlank ?? false,
+      isNew: Boolean(placedCell),
+    })
+  }
+
+  return cells
+}
+
 function canBuildWordOnBoard(
   puzzle: DailyPuzzle,
+  filledMap: Map<string, string>,
   word: string,
   startRow: number,
   startCol: number,
@@ -58,7 +135,7 @@ function canBuildWordOnBoard(
       return null
     }
 
-    const boardLetter = getFixedLetter(puzzle.filledCells, row, col)
+    const boardLetter = filledMap.get(getCellKey(row, col)) || ""
     const wordLetter = word[i]
 
     if (boardLetter) {
@@ -87,7 +164,7 @@ function canBuildWordOnBoard(
       { row: cell.row, col: cell.col + 1 },
     ]
     for (const n of neighbors) {
-      const neighborLetter = getFixedLetter(puzzle.filledCells, n.row, n.col)
+      const neighborLetter = filledMap.get(getCellKey(n.row, n.col))
       if (neighborLetter) touchesExisting = true
     }
   }
@@ -98,28 +175,18 @@ function canBuildWordOnBoard(
 }
 
 
-function scoreWordAtPlacement(
-  puzzle: DailyPuzzle,
-  word: string,
-  startRow: number,
-  startCol: number,
-  direction: "row" | "col",
-  placed: PlacedCell[]
+function scoreWordCells(
+  bonusMap: Map<string, BonusType>,
+  cells: Array<PlacedCell & { isNew: boolean }>
 ) {
   let total = 0
   let wordMultiplier = 1
 
-  for (let i = 0; i < word.length; i++) {
-    const row = direction === "row" ? startRow : startRow + i
-    const col = direction === "row" ? startCol + i : startCol
-    const letter = word[i]
+  for (const cell of cells) {
+    let letterScore = cell.isBlank ? 0 : LETTER_SCORES[cell.letter] || 0
 
-    const placedCell = placed.find((p) => p.row === row && p.col === col)
-    let letterScore = placedCell?.isBlank ? 0 : LETTER_SCORES[letter] || 0
-    const isNewTile = Boolean(placedCell)
-
-    if (isNewTile) {
-      const bonus = getBonusAt(puzzle.bonusCells, row, col)
+    if (cell.isNew) {
+      const bonus = bonusMap.get(getCellKey(cell.row, cell.col))
       if (bonus === "DL") letterScore *= 2
       if (bonus === "TL") letterScore *= 3
       if (bonus === "DW") wordMultiplier *= 2
@@ -134,62 +201,42 @@ function scoreWordAtPlacement(
 
 function getCrossWordResult(
   puzzle: DailyPuzzle,
+  filledMap: Map<string, string>,
+  placedMap: Map<string, PlacedCell>,
+  bonusMap: Map<string, BonusType>,
   newTile: PlacedCell,
   mainDirection: "row" | "col"
 ): { word: string; score: number } | null {
   const crossDir = mainDirection === "row" ? "col" : "row"
-  const cells: Array<{ row: number; col: number; letter: string; isNew: boolean }> = [
-    { row: newTile.row, col: newTile.col, letter: newTile.letter, isNew: true },
-  ]
-
-  if (crossDir === "col") {
-    for (let r = newTile.row - 1; r >= 0; r--) {
-      const letter = getFixedLetter(puzzle.filledCells, r, newTile.col)
-      if (!letter) break
-      cells.unshift({ row: r, col: newTile.col, letter, isNew: false })
-    }
-    for (let r = newTile.row + 1; r < puzzle.boardSize; r++) {
-      const letter = getFixedLetter(puzzle.filledCells, r, newTile.col)
-      if (!letter) break
-      cells.push({ row: r, col: newTile.col, letter, isNew: false })
-    }
-  } else {
-    for (let c = newTile.col - 1; c >= 0; c--) {
-      const letter = getFixedLetter(puzzle.filledCells, newTile.row, c)
-      if (!letter) break
-      cells.unshift({ row: newTile.row, col: c, letter, isNew: false })
-    }
-    for (let c = newTile.col + 1; c < puzzle.boardSize; c++) {
-      const letter = getFixedLetter(puzzle.filledCells, newTile.row, c)
-      if (!letter) break
-      cells.push({ row: newTile.row, col: c, letter, isNew: false })
-    }
-  }
+  const cells = getWordCellsFromBoard(
+    puzzle,
+    filledMap,
+    placedMap,
+    newTile.row,
+    newTile.col,
+    crossDir
+  )
 
   if (cells.length <= 1) return null
 
   const word = cells.map((c) => c.letter).join("")
-  let total = 0
-  let wordMultiplier = 1
 
-  for (const cell of cells) {
-    let letterScore = cell.isNew && newTile.isBlank && cell.row === newTile.row && cell.col === newTile.col
-      ? 0
-      : LETTER_SCORES[cell.letter] || 0
-    if (cell.isNew) {
-      const bonus = getBonusAt(puzzle.bonusCells, cell.row, cell.col)
-      if (bonus === "DL") letterScore *= 2
-      if (bonus === "TL") letterScore *= 3
-      if (bonus === "DW") wordMultiplier *= 2
-      if (bonus === "TW") wordMultiplier *= 3
-    }
-    total += letterScore
-  }
-
-  return { word, score: total * wordMultiplier }
+  return { word, score: scoreWordCells(bonusMap, cells) }
 }
 
 export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
+  const cacheKey = getPuzzleCacheKey(puzzle)
+  const cached = solverCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const filledMap = new Map(
+    puzzle.filledCells.map((cell) => [getCellKey(cell.row, cell.col), cell.letter])
+  )
+  const bonusMap = new Map(
+    puzzle.bonusCells.map((cell) => [getCellKey(cell.row, cell.col), cell.type])
+  )
   let bestScore = 0
   let bestWords: string[] = []
   let bestPlacement: PlacedCell[] = []
@@ -202,14 +249,35 @@ export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
     for (let row = 0; row < puzzle.boardSize; row++) {
       for (let col = 0; col < puzzle.boardSize; col++) {
         for (const direction of ["row", "col"] as const) {
-          const placed = canBuildWordOnBoard(puzzle, word, row, col, direction)
+          const placed = canBuildWordOnBoard(puzzle, filledMap, word, row, col, direction)
           if (!placed) continue
+          const placedMap = new Map(placed.map((cell) => [getCellKey(cell.row, cell.col), cell]))
+          const mainCells = getWordCellsFromBoard(
+            puzzle,
+            filledMap,
+            placedMap,
+            placed[0].row,
+            placed[0].col,
+            direction
+          )
+          const mainWord = mainCells.map((cell) => cell.letter).join("")
+
+          if (mainWord.length <= 1 || !VALID_WORDS.has(mainWord)) {
+            continue
+          }
 
           const crossWords: { word: string; score: number }[] = []
           let hasInvalidCrossWord = false
 
           for (const newTile of placed) {
-            const cross = getCrossWordResult(puzzle, newTile, direction)
+            const cross = getCrossWordResult(
+              puzzle,
+              filledMap,
+              placedMap,
+              bonusMap,
+              newTile,
+              direction
+            )
             if (!cross) continue
             if (!VALID_WORDS.has(cross.word)) {
               hasInvalidCrossWord = true
@@ -220,13 +288,13 @@ export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
 
           if (hasInvalidCrossWord) continue
 
-          const mainScore = scoreWordAtPlacement(puzzle, word, row, col, direction, placed)
+          const mainScore = scoreWordCells(bonusMap, mainCells)
           const crossScore = crossWords.reduce((sum, cw) => sum + cw.score, 0)
           const score = mainScore + crossScore
 
           if (score > bestScore) {
             bestScore = score
-            bestWords = [word]
+            bestWords = [mainWord, ...crossWords.map((cross) => cross.word)]
             bestPlacement = placed
           }
         }
@@ -234,9 +302,12 @@ export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
     }
   }
 
-  return {
+  const result = {
     bestScore,
     bestWords,
     bestPlacement,
   }
+
+  solverCache.set(cacheKey, result)
+  return result
 }

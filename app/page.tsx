@@ -83,6 +83,25 @@ type GameStats = {
   lastPlayedDate: string | null
   lastPerfectDate: string | null
   ratingCounts: Record<string, number>
+  puzzleHistory: PuzzleAnalyticsRecord[]
+}
+
+type UiFeedbackKind = "submit" | "hint" | "recall" | "win"
+
+type PuzzleAnalyticsRecord = {
+  date: string
+  mode: "easy" | "hard"
+  bestScore: number
+  optimalScore: number
+  scorePercent: number
+  attemptsUsed: number
+  hintsUsed: number
+  rating: string
+}
+
+type ArchiveCompletionStatus = {
+  easy: boolean
+  hard: boolean
 }
 
 const defaultStats: GameStats = {
@@ -94,10 +113,13 @@ const defaultStats: GameStats = {
   lastPlayedDate: null,
   lastPerfectDate: null,
   ratingCounts: { Perfect: 0, Excellent: 0, Great: 0, Solid: 0, "Keep trying": 0 },
+  puzzleHistory: [],
 }
 
 const STATS_KEY = "daily-word-game-stats"
 const SOUND_MUTED_KEY = "daily-word-game-sound-muted"
+const HAPTICS_ENABLED_KEY = "daily-word-game-haptics-enabled"
+const REDUCED_MOTION_KEY = "daily-word-game-reduced-motion"
 const HOME_BRAND_TILES = ["L", "E", "X", "I", "C", "O", "N"]
 
 function shuffleArray(items: RackSlot[]) {
@@ -146,6 +168,20 @@ function formatCalendarMonthLabel(monthKey: string) {
   }).format(date)
 }
 
+function getTimeUntilNextLocalDay(now: Date) {
+  const nextMidnight = new Date(now)
+  nextMidnight.setHours(24, 0, 0, 0)
+  return Math.max(0, nextMidnight.getTime() - now.getTime())
+}
+
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+}
+
 function triggerHapticFeedback(pattern: number | number[] = 12) {
   if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
     return
@@ -173,6 +209,46 @@ function createPlacementSound(ctx: AudioContext) {
   oscillator.stop(now + 0.12)
 }
 
+function createUiFeedbackSound(ctx: AudioContext, kind: UiFeedbackKind) {
+  const now = ctx.currentTime
+  const gain = ctx.createGain()
+  gain.connect(ctx.destination)
+
+  const notesByKind: Record<UiFeedbackKind, Array<{ freq: number; start: number; duration: number; type: OscillatorType; volume: number }>> = {
+    submit: [
+      { freq: 420, start: 0, duration: 0.08, type: "triangle", volume: 0.04 },
+      { freq: 620, start: 0.07, duration: 0.1, type: "sine", volume: 0.05 },
+    ],
+    hint: [
+      { freq: 540, start: 0, duration: 0.07, type: "sine", volume: 0.035 },
+      { freq: 760, start: 0.06, duration: 0.09, type: "triangle", volume: 0.045 },
+    ],
+    recall: [
+      { freq: 500, start: 0, duration: 0.07, type: "triangle", volume: 0.035 },
+      { freq: 360, start: 0.05, duration: 0.08, type: "sine", volume: 0.03 },
+    ],
+    win: [
+      { freq: 520, start: 0, duration: 0.09, type: "triangle", volume: 0.05 },
+      { freq: 660, start: 0.08, duration: 0.11, type: "triangle", volume: 0.055 },
+      { freq: 880, start: 0.16, duration: 0.16, type: "sine", volume: 0.06 },
+    ],
+  }
+
+  for (const note of notesByKind[kind]) {
+    const oscillator = ctx.createOscillator()
+    const noteGain = ctx.createGain()
+    oscillator.type = note.type
+    oscillator.frequency.setValueAtTime(note.freq, now + note.start)
+    noteGain.gain.setValueAtTime(0.0001, now + note.start)
+    noteGain.gain.exponentialRampToValueAtTime(note.volume, now + note.start + 0.015)
+    noteGain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration)
+    oscillator.connect(noteGain)
+    noteGain.connect(gain)
+    oscillator.start(now + note.start)
+    oscillator.stop(now + note.start + note.duration + 0.02)
+  }
+}
+
 export default function Home() {
   const todayDate = useMemo(() => getLocalDateString(), [])
   const todayDisplayDate = useMemo(() => formatDisplayDate(todayDate), [todayDate])
@@ -182,12 +258,17 @@ export default function Home() {
     date: todayDate,
     mode: "easy",
   })
+  const [hasMounted, setHasMounted] = useState(false)
+  const [countdownMs, setCountdownMs] = useState(() => getTimeUntilNextLocalDay(new Date()))
+  const resetCountdown = useMemo(() => formatCountdown(countdownMs), [countdownMs])
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
   const [viewMode, setViewMode] = useState<"home" | "daily" | "game">("home")
   const [archiveMonthKey, setArchiveMonthKey] = useState(() => getMonthKey(todayDate))
-  const [completedArchiveDates, setCompletedArchiveDates] = useState<Record<string, boolean>>({})
+  const [completedArchiveDates, setCompletedArchiveDates] = useState<
+    Record<string, ArchiveCompletionStatus>
+  >({})
   const [touchDrag, setTouchDrag] = useState<TouchDragState>(null)
   const [touchDragEngaged, setTouchDragEngaged] = useState(false)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
@@ -277,10 +358,14 @@ export default function Home() {
   const [hintLevel, setHintLevel] = useState(0)
   const [showHint, setShowHint] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [showPuzzleReview, setShowPuzzleReview] = useState(false)
   const [showResultsModal, setShowResultsModal] = useState(false)
   const [recentPlacementKey, setRecentPlacementKey] = useState<string | null>(null)
+  const [uiFeedback, setUiFeedback] = useState<{ kind: UiFeedbackKind; tick: number } | null>(null)
   const [soundMuted, setSoundMuted] = useState(false)
+  const [hapticsEnabled, setHapticsEnabled] = useState(true)
+  const [reducedMotionEnabled, setReducedMotionEnabled] = useState(false)
   const [hasSavedTodayGame, setHasSavedTodayGame] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
@@ -331,6 +416,41 @@ export default function Home() {
     createPlacementSound(audioContext)
   }
 
+  function playUiFeedbackSound(kind: UiFeedbackKind) {
+    if (typeof window === "undefined") return
+    if (soundMuted) return
+
+    const AudioContextConstructor = window.AudioContext
+    if (!AudioContextConstructor) return
+
+    let audioContext = audioContextRef.current
+    if (!audioContext) {
+      audioContext = new AudioContextConstructor()
+      audioContextRef.current = audioContext
+    }
+
+    if (audioContext.state === "suspended") {
+      void audioContext.resume().then(() => {
+        createUiFeedbackSound(audioContext!, kind)
+      }).catch(() => {
+        // ignore blocked audio playback
+      })
+      return
+    }
+
+    createUiFeedbackSound(audioContext, kind)
+  }
+
+  function triggerUiFeedback(kind: UiFeedbackKind) {
+    setUiFeedback({ kind, tick: Date.now() })
+    playUiFeedbackSound(kind)
+  }
+
+  function triggerAppHapticFeedback(pattern: number | number[] = 12) {
+    if (!hapticsEnabled) return
+    triggerHapticFeedback(pattern)
+  }
+
   useEffect(() => {
     function updateViewportSize() {
       setViewportSize({
@@ -342,6 +462,19 @@ export default function Home() {
     updateViewportSize()
     window.addEventListener("resize", updateViewportSize)
     return () => window.removeEventListener("resize", updateViewportSize)
+  }, [])
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
+  useEffect(() => {
+    setCountdownMs(getTimeUntilNextLocalDay(new Date()))
+    const intervalId = window.setInterval(() => {
+      setCountdownMs(getTimeUntilNextLocalDay(new Date()))
+    }, 1000)
+
+    return () => window.clearInterval(intervalId)
   }, [])
 
   useEffect(() => {
@@ -398,6 +531,28 @@ export default function Home() {
     }
 
     try {
+      const savedHaptics = localStorage.getItem(HAPTICS_ENABLED_KEY)
+      setHapticsEnabled(savedHaptics === null ? true : savedHaptics === "1")
+    } catch {
+      // ignore
+    }
+
+    try {
+      const savedReducedMotion = localStorage.getItem(REDUCED_MOTION_KEY)
+      if (savedReducedMotion === null) {
+        setReducedMotionEnabled(
+          typeof window !== "undefined" &&
+            typeof window.matchMedia === "function" &&
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        )
+      } else {
+        setReducedMotionEnabled(savedReducedMotion === "1")
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
       setHasSavedTodayGame(Boolean(localStorage.getItem(`daily-word-game-${todayDate}`)))
     } catch {
       // ignore
@@ -411,6 +566,22 @@ export default function Home() {
       // ignore
     }
   }, [soundMuted])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(HAPTICS_ENABLED_KEY, hapticsEnabled ? "1" : "0")
+    } catch {
+      // ignore
+    }
+  }, [hapticsEnabled])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(REDUCED_MOTION_KEY, reducedMotionEnabled ? "1" : "0")
+    } catch {
+      // ignore
+    }
+  }, [reducedMotionEnabled])
 
   useEffect(() => {
     try {
@@ -431,7 +602,7 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const completionMap: Record<string, boolean> = {}
+      const completionMap: Record<string, ArchiveCompletionStatus> = {}
 
       for (const puzzleEntry of DAILY_PUZZLES) {
         for (const mode of ["easy", "hard"] as const) {
@@ -441,7 +612,14 @@ export default function Home() {
           try {
             const parsed = JSON.parse(saved) as Partial<SavedGameState>
             if (parsed.attemptsLeft === 0) {
-              completionMap[puzzleEntry.date] = true
+              const currentStatus = completionMap[puzzleEntry.date] ?? {
+                easy: false,
+                hard: false,
+              }
+              completionMap[puzzleEntry.date] = {
+                ...currentStatus,
+                [mode]: true,
+              }
             }
           } catch {
             // ignore bad saved data
@@ -450,7 +628,14 @@ export default function Home() {
       }
 
       if (attemptsLeft === 0) {
-        completionMap[selectedDate] = true
+        const currentStatus = completionMap[selectedDate] ?? {
+          easy: false,
+          hard: false,
+        }
+        completionMap[selectedDate] = {
+          ...currentStatus,
+          [activeGameMode]: true,
+        }
       }
 
       setCompletedArchiveDates(completionMap)
@@ -633,7 +818,7 @@ export default function Home() {
     }
 
     setRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
-    triggerHapticFeedback(10)
+    triggerAppHapticFeedback(10)
     draggedTileRef.current = null
     setDraggedTile(null)
     setSelectedTile(null)
@@ -745,7 +930,7 @@ export default function Home() {
     setSelectedTile(null)
     setDraggedTile(null)
     setRackDropIndex(null)
-    triggerHapticFeedback(tileData.isBlank ? [10, 20, 10] : 12)
+    triggerAppHapticFeedback(tileData.isBlank ? [10, 20, 10] : 12)
     playPlacementSound()
     setMessage(
       tileData.isBlank
@@ -784,7 +969,7 @@ export default function Home() {
     setDraggedPlacedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
-    triggerHapticFeedback(10)
+    triggerAppHapticFeedback(10)
     setMessage(tile.isBlank ? `Moved blank tile (${tile.letter}).` : `Moved ${tile.letter}.`)
   }
 
@@ -873,7 +1058,7 @@ export default function Home() {
     setDraggedPlacedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
-    triggerHapticFeedback(10)
+    triggerAppHapticFeedback(10)
     setMessage(tile.isBlank ? "Returned blank tile to the rack." : `Returned ${tile.letter} to the rack.`)
   }
 
@@ -1153,7 +1338,8 @@ export default function Home() {
     setAttemptsLeft(newAttemptsLeft)
     setBestScore(newBestScore)
     setAttemptHistory([...attemptHistory, newAttempt])
-    triggerHapticFeedback(solvedOptimally ? [18, 24, 18] : [12, 18, 12])
+    triggerAppHapticFeedback(solvedOptimally ? [18, 24, 18] : [12, 18, 12])
+    triggerUiFeedback(solvedOptimally ? "win" : "submit")
     setMessage(
       solvedOptimallyOnFirstTry
         ? `Perfect first try. You scored the optimal ${solution.bestScore}, so the game is over.`
@@ -1175,7 +1361,16 @@ export default function Home() {
           : newBestScore / solution.bestScore >= 0.5
           ? "Solid"
           : "Keep trying"
-      updateStats(rating)
+      updateStats(rating, {
+        date: puzzle.date,
+        mode: activeGameMode,
+        bestScore: newBestScore,
+        optimalScore: solution.bestScore,
+        scorePercent: solution.bestScore > 0 ? newBestScore / solution.bestScore : 0,
+        attemptsUsed: attemptHistory.length + 1,
+        hintsUsed: hintLevel,
+        rating,
+      })
     }
 
     setRack(startingRack)
@@ -1199,7 +1394,8 @@ export default function Home() {
       }
       return [...nextRack, last.isBlank ? BLANK_TILE : last.letter]
     })
-    triggerHapticFeedback(8)
+    triggerAppHapticFeedback(8)
+    triggerUiFeedback("recall")
     setMessage(last.isBlank ? "Returned blank tile to the rack." : `Returned ${last.letter} to the rack.`)
   }
 
@@ -1210,7 +1406,8 @@ export default function Home() {
     setDraggedTile(null)
     setDraggedPlacedTile(null)
     setRackDropIndex(null)
-    triggerHapticFeedback(8)
+    triggerAppHapticFeedback(8)
+    triggerUiFeedback("recall")
     setMessage("Board cleared. Start a new move.")
   }
 
@@ -1229,14 +1426,15 @@ export default function Home() {
     setHintLevel(0)
     setShowHint(false)
     setShowMoreActions(false)
+    setShowSettings(false)
     setShowPuzzleReview(false)
     statsUpdatedRef.current = false
-    triggerHapticFeedback([10, 18, 10])
+    triggerAppHapticFeedback([10, 18, 10])
     setMessage("New game started.")
     localStorage.removeItem(storageKey)
   }
 
-  function updateStats(rating: string) {
+  function updateStats(rating: string, analyticsRecord: PuzzleAnalyticsRecord) {
     if (statsUpdatedRef.current) return
     statsUpdatedRef.current = true
 
@@ -1250,6 +1448,7 @@ export default function Home() {
           ...defaultStats.ratingCounts,
           ...(parsed.ratingCounts ?? {}),
         },
+        puzzleHistory: Array.isArray(parsed.puzzleHistory) ? parsed.puzzleHistory : [],
       }
       if (current.lastPlayedDate === puzzle.date) return
 
@@ -1277,6 +1476,7 @@ export default function Home() {
           ...current.ratingCounts,
           [rating]: (current.ratingCounts[rating] ?? 0) + 1,
         },
+        puzzleHistory: [...current.puzzleHistory, analyticsRecord].slice(-400),
       }
 
       localStorage.setItem(STATS_KEY, JSON.stringify(newStats))
@@ -1323,6 +1523,7 @@ export default function Home() {
     setShowArchive(false)
     setShowStats(false)
     setShowMoreActions(false)
+    setShowSettings(false)
     setShowPuzzleReview(false)
   }
 
@@ -1610,8 +1811,9 @@ export default function Home() {
     setRackDropIndex(null)
     setHintLevel(2)
     setShowHint(true)
-    triggerHapticFeedback([10, 20, 10])
+    triggerAppHapticFeedback([10, 20, 10])
     playPlacementSound()
+    triggerUiFeedback("hint")
   }
 
   function getHintStatusText() {
@@ -1624,7 +1826,8 @@ export default function Home() {
     if (hintLevel === 0) {
       setHintLevel(1)
       setShowHint(true)
-      triggerHapticFeedback(10)
+      triggerAppHapticFeedback(10)
+      triggerUiFeedback("hint")
       return
     }
 
@@ -1704,6 +1907,42 @@ export default function Home() {
     textAlign: "left",
     boxShadow: "0 10px 24px rgba(78, 56, 28, 0.08)",
   }
+  const analyticsRecords = stats.puzzleHistory ?? []
+  const averageScorePercent =
+    analyticsRecords.length > 0
+      ? Math.round(
+          (analyticsRecords.reduce((sum, record) => sum + record.scorePercent, 0) /
+            analyticsRecords.length) *
+            100
+        )
+      : 0
+  const averageAttemptsUsed =
+    analyticsRecords.length > 0
+      ? (
+          analyticsRecords.reduce((sum, record) => sum + record.attemptsUsed, 0) /
+          analyticsRecords.length
+        ).toFixed(1)
+      : "0.0"
+  const hintUsageRate =
+    analyticsRecords.length > 0
+      ? Math.round(
+          (analyticsRecords.filter((record) => record.hintsUsed > 0).length / analyticsRecords.length) * 100
+        )
+      : 0
+  const hardGamesPlayed = analyticsRecords.filter((record) => record.mode === "hard").length
+  const perfectRate =
+    analyticsRecords.length > 0
+      ? Math.round(
+          (analyticsRecords.filter((record) => record.rating === "Perfect").length / analyticsRecords.length) *
+            100
+        )
+      : 0
+  const toughestPuzzle =
+    analyticsRecords.length > 0
+      ? analyticsRecords.reduce((lowest, record) =>
+          record.scorePercent < lowest.scorePercent ? record : lowest
+        )
+      : null
   const statsPanel = showStats && (
     <div
       style={{
@@ -1714,7 +1953,7 @@ export default function Home() {
         padding: isCompactMobile ? "14px 16px" : "16px 18px",
         marginBottom: "16px",
         boxShadow: homeActionButtonStyle.boxShadow,
-        animation: "fade-up 220ms ease both",
+        animation: reducedMotionEnabled ? undefined : "fade-up 220ms ease both",
       }}
     >
       <strong style={{ fontSize: "18px" }}>Your Stats</strong>
@@ -1733,6 +1972,59 @@ export default function Home() {
       </div>
       {stats.gamesPlayed > 0 && (
         <div style={{ marginTop: "16px" }}>
+          <div style={{ fontWeight: "bold", marginBottom: "10px", fontSize: "13px" }}>
+            Puzzle Analytics
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isCompactMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+              gap: "10px",
+              marginBottom: "16px",
+            }}
+          >
+            {[
+              { label: "Avg Score", value: `${averageScorePercent}%` },
+              { label: "Avg Attempts", value: averageAttemptsUsed },
+              { label: "Hint Rate", value: `${hintUsageRate}%` },
+              { label: "Hard Games", value: hardGamesPlayed },
+              { label: "Perfect Rate", value: `${perfectRate}%` },
+            ].map(({ label, value }) => (
+              <div
+                key={label}
+                style={{
+                  background: "rgba(255,250,240,0.7)",
+                  border: "1px solid rgba(123, 98, 65, 0.12)",
+                  borderRadius: "12px",
+                  padding: "10px 12px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#8a6a42", marginBottom: "4px" }}>{label}</div>
+                <div style={{ fontSize: "22px", fontWeight: 800 }}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {toughestPuzzle && (
+            <div
+              style={{
+                background: "rgba(255,250,240,0.7)",
+                border: "1px solid rgba(123, 98, 65, 0.12)",
+                borderRadius: "12px",
+                padding: "10px 12px",
+                marginBottom: "16px",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#8a6a42", marginBottom: "4px" }}>Toughest Puzzle So Far</div>
+              <div style={{ fontSize: "16px", fontWeight: 800 }}>
+                {formatDisplayDate(toughestPuzzle.date)} · {toughestPuzzle.mode}
+              </div>
+              <div style={{ fontSize: "13px", color: "#5b4630", marginTop: "4px" }}>
+                Best score {toughestPuzzle.bestScore}/{toughestPuzzle.optimalScore} ({Math.round(toughestPuzzle.scorePercent * 100)}%)
+              </div>
+            </div>
+          )}
+
           <div style={{ fontWeight: "bold", marginBottom: "8px", fontSize: "13px" }}>
             Score Distribution
           </div>
@@ -1779,6 +2071,22 @@ export default function Home() {
   const archiveFirstWeekday =
     archiveYear && archiveMonth ? new Date(archiveYear, archiveMonth - 1, 1).getDay() : 0
   const archiveCalendarCells: Array<{ date: string | null; puzzleDate: string | null }> = []
+  const archivePuzzleDatesInMonth = archivePuzzles.filter(
+    (puzzle) => getMonthKey(puzzle.date) === activeArchiveMonthKey
+  )
+  const archivePuzzleCountThisMonth = archivePuzzleDatesInMonth.length
+  const archiveCompletedCountThisMonth = archivePuzzleDatesInMonth.filter(
+    (puzzle) => {
+      const status = completedArchiveDates[puzzle.date]
+      return Boolean(status?.easy || status?.hard)
+    }
+  ).length
+  const archiveEasyCompletedCountThisMonth = archivePuzzleDatesInMonth.filter(
+    (puzzle) => completedArchiveDates[puzzle.date]?.easy
+  ).length
+  const archiveHardCompletedCountThisMonth = archivePuzzleDatesInMonth.filter(
+    (puzzle) => completedArchiveDates[puzzle.date]?.hard
+  ).length
 
   for (let index = 0; index < archiveFirstWeekday; index++) {
     archiveCalendarCells.push({ date: null, puzzleDate: null })
@@ -1803,173 +2111,338 @@ export default function Home() {
         background: homeActionButtonStyle.background,
         border: homeActionButtonStyle.border,
         borderRadius: homeActionButtonStyle.borderRadius,
-        padding: isCompactMobile ? "14px 16px" : "16px 18px",
+        padding: isCompactMobile ? "16px" : "18px 20px",
         marginBottom: "16px",
         boxShadow: homeActionButtonStyle.boxShadow,
-        animation: "fade-up 220ms ease both",
+        animation: reducedMotionEnabled ? undefined : "fade-up 220ms ease both",
       }}
     >
-      <strong style={{ fontSize: "16px" }}>Puzzle Archive</strong>
       <div
         style={{
           display: "flex",
-          alignItems: "center",
           justifyContent: "space-between",
-          gap: "12px",
-          marginTop: "14px",
-          marginBottom: "12px",
+          alignItems: "flex-start",
+          gap: "14px",
+          marginBottom: "14px",
         }}
       >
-        <button
-          onClick={() =>
-            setArchiveMonthKey(
-              archiveMonthKeys[Math.max(0, activeArchiveMonthIndex - 1)] ?? activeArchiveMonthKey
-            )
-          }
-          disabled={activeArchiveMonthIndex <= 0}
-          style={{
-            width: "38px",
-            height: "38px",
-            borderRadius: "999px",
-            border: "1px solid rgba(123, 98, 65, 0.18)",
-            backgroundColor: activeArchiveMonthIndex <= 0 ? "#e7dcc8" : "#efe2c7",
-            color: activeArchiveMonthIndex <= 0 ? "#9d8b71" : "#2f2419",
-            cursor: activeArchiveMonthIndex <= 0 ? "not-allowed" : "pointer",
-            fontWeight: 800,
-            flexShrink: 0,
-          }}
-        >
-          {"<"}
-        </button>
+        <div>
+          <strong style={{ fontSize: isCompactMobile ? "17px" : "18px", display: "block" }}>
+            Puzzle Archive
+          </strong>
+          <div
+            style={{
+              marginTop: "4px",
+              fontSize: isCompactMobile ? "12px" : "13px",
+              color: "#6d5537",
+              lineHeight: 1.4,
+            }}
+          >
+            Browse past boards and jump back into any day.
+          </div>
+        </div>
         <div
           style={{
-            flex: 1,
-            textAlign: "center",
-            fontSize: "16px",
-            fontWeight: 800,
-            color: "#3a2c1f",
-          }}
-        >
-          {formatCalendarMonthLabel(activeArchiveMonthKey)}
-        </div>
-        <button
-          onClick={() =>
-            setArchiveMonthKey(
-              archiveMonthKeys[Math.min(archiveMonthKeys.length - 1, activeArchiveMonthIndex + 1)] ??
-                activeArchiveMonthKey
-            )
-          }
-          disabled={activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1}
-          style={{
-            width: "38px",
-            height: "38px",
+            padding: isCompactMobile ? "8px 10px" : "9px 12px",
             borderRadius: "999px",
-            border: "1px solid rgba(123, 98, 65, 0.18)",
-            backgroundColor:
-              activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
-                ? "#e7dcc8"
-                : "#efe2c7",
-            color:
-              activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
-                ? "#9d8b71"
-                : "#2f2419",
-            cursor:
-              activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
-                ? "not-allowed"
-                : "pointer",
+            background: "rgba(255,250,240,0.9)",
+            border: "1px solid rgba(123, 98, 65, 0.14)",
+            color: "#2f2419",
             fontWeight: 800,
             flexShrink: 0,
+            fontSize: isCompactMobile ? "12px" : "13px",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)",
           }}
         >
-          {">"}
-        </button>
+          {archiveCompletedCountThisMonth}/{archivePuzzleCountThisMonth} done
+        </div>
       </div>
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-          gap: isCompactMobile ? "5px" : "6px",
+          background: "rgba(255,250,240,0.7)",
+          borderRadius: isCompactMobile ? "16px" : "18px",
+          border: "1px solid rgba(123, 98, 65, 0.12)",
+          padding: isCompactMobile ? "12px" : "14px",
         }}
       >
-        {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
-          <div
-            key={`${day}-${index}`}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            marginBottom: "12px",
+          }}
+        >
+          <button
+            onClick={() =>
+              setArchiveMonthKey(
+                archiveMonthKeys[Math.max(0, activeArchiveMonthIndex - 1)] ?? activeArchiveMonthKey
+              )
+            }
+            disabled={activeArchiveMonthIndex <= 0}
+            aria-label="Previous month"
             style={{
-              textAlign: "center",
-              fontSize: isCompactMobile ? "10px" : "11px",
+              width: isCompactMobile ? "36px" : "40px",
+              height: isCompactMobile ? "36px" : "40px",
+              borderRadius: "999px",
+              border: "1px solid rgba(123, 98, 65, 0.18)",
+              backgroundColor: activeArchiveMonthIndex <= 0 ? "#e7dcc8" : "#efe2c7",
+              color: activeArchiveMonthIndex <= 0 ? "#9d8b71" : "#2f2419",
+              cursor: activeArchiveMonthIndex <= 0 ? "not-allowed" : "pointer",
               fontWeight: 800,
-              color: "#8a6a42",
-              paddingBottom: isCompactMobile ? "2px" : "3px",
+              flexShrink: 0,
+              fontSize: isCompactMobile ? "18px" : "20px",
+              lineHeight: 1,
             }}
           >
-            {day}
+            ‹
+          </button>
+          <div
+            style={{
+              flex: 1,
+              textAlign: "center",
+              fontSize: isCompactMobile ? "15px" : "16px",
+              fontWeight: 800,
+              color: "#3a2c1f",
+              padding: isCompactMobile ? "8px 10px" : "9px 12px",
+              borderRadius: "999px",
+              background: "rgba(239,226,199,0.72)",
+              border: "1px solid rgba(123, 98, 65, 0.12)",
+            }}
+          >
+            {formatCalendarMonthLabel(activeArchiveMonthKey)}
           </div>
-        ))}
-        {archiveCalendarCells.map((cell, index) => {
-          if (!cell.date) {
-            return (
-              <div
-                key={`empty-${index}`}
-                style={{
-                  aspectRatio: "1 / 1",
-                  borderRadius: isCompactMobile ? "9px" : "10px",
-                  backgroundColor: "rgba(203, 190, 170, 0.22)",
-                }}
-              />
-            )
-          }
-
-          const isToday = cell.date === todayDate
-          const isSelected = cell.date === selectedDate && viewMode === "game"
-          const isCompleted = Boolean(completedArchiveDates[cell.date])
-          const hasPuzzle = Boolean(cell.puzzleDate)
-
-          if (!hasPuzzle) {
-            return (
-              <div
-                key={cell.date}
-                style={{
-                  aspectRatio: "1 / 1",
-                  borderRadius: isCompactMobile ? "9px" : "10px",
-                  backgroundColor: "rgba(203, 190, 170, 0.22)",
-                  color: "#9d8b71",
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: isCompactMobile ? "11px" : "12px",
-                  fontWeight: 700,
-                }}
-              >
-                {Number(cell.date.slice(-2))}
-              </div>
-            )
-          }
-
-          return (
-            <button
-              key={cell.date}
-              onClick={() => selectPuzzleDate(cell.date!)}
+          <button
+            onClick={() =>
+              setArchiveMonthKey(
+                archiveMonthKeys[Math.min(archiveMonthKeys.length - 1, activeArchiveMonthIndex + 1)] ??
+                  activeArchiveMonthKey
+              )
+            }
+            disabled={activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1}
+            aria-label="Next month"
+            style={{
+              width: isCompactMobile ? "36px" : "40px",
+              height: isCompactMobile ? "36px" : "40px",
+              borderRadius: "999px",
+              border: "1px solid rgba(123, 98, 65, 0.18)",
+              backgroundColor:
+                activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
+                  ? "#e7dcc8"
+                  : "#efe2c7",
+              color:
+                activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
+                  ? "#9d8b71"
+                  : "#2f2419",
+              cursor:
+                activeArchiveMonthIndex === -1 || activeArchiveMonthIndex >= archiveMonthKeys.length - 1
+                  ? "not-allowed"
+                  : "pointer",
+              fontWeight: 800,
+              flexShrink: 0,
+              fontSize: isCompactMobile ? "18px" : "20px",
+              lineHeight: 1,
+            }}
+          >
+            ›
+          </button>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "10px",
+            marginBottom: "10px",
+            fontSize: isCompactMobile ? "11px" : "12px",
+            color: "#7b6140",
+            fontWeight: 700,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <span
               style={{
-                aspectRatio: "1 / 1",
-                borderRadius: isCompactMobile ? "9px" : "10px",
-                border: isSelected
-                  ? "2px solid #5f4221"
-                  : isToday
-                    ? "2px solid #b98f58"
-                    : "1px solid rgba(123, 98, 65, 0.18)",
-                backgroundColor: isCompleted ? "#7aad2a" : "#efe2c7",
-                color: isCompleted ? "#fffaf1" : "#2f2419",
-                cursor: "pointer",
+                width: "10px",
+                height: "10px",
+                borderRadius: "999px",
+                background: "#7aad2a",
+                boxShadow: "0 0 0 2px rgba(122,173,42,0.18)",
+              }}
+            />
+            Easy
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <span
+              style={{
+                width: "10px",
+                height: "10px",
+                borderRadius: "999px",
+                background: "#5f4221",
+                boxShadow: "0 0 0 2px rgba(95,66,33,0.14)",
+              }}
+            />
+            Hard
+          </div>
+          <div style={{ opacity: 0.75 }}>
+            {archivePuzzleCountThisMonth === 0
+              ? "No puzzles in this month."
+              : `${archiveCompletedCountThisMonth}/${archivePuzzleCountThisMonth} dates played · ${archiveEasyCompletedCountThisMonth} easy · ${archiveHardCompletedCountThisMonth} hard`}
+          </div>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+            gap: isCompactMobile ? "5px" : "6px",
+          }}
+        >
+          {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+            <div
+              key={`${day}-${index}`}
+              style={{
+                textAlign: "center",
+                fontSize: isCompactMobile ? "10px" : "11px",
                 fontWeight: 800,
-                fontSize: isCompactMobile ? "11px" : "12px",
-                display: "grid",
-                placeItems: "center",
-                boxShadow: isCompleted ? "0 8px 16px rgba(114, 173, 45, 0.18)" : "none",
+                color: "#8a6a42",
+                paddingBottom: isCompactMobile ? "2px" : "3px",
               }}
             >
-              {Number(cell.date.slice(-2))}
-            </button>
-          )
-        })}
+              {day}
+            </div>
+          ))}
+          {archiveCalendarCells.map((cell, index) => {
+            if (!cell.date) {
+              return (
+                <div
+                  key={`empty-${index}`}
+                  style={{
+                    aspectRatio: "1 / 1",
+                    borderRadius: isCompactMobile ? "11px" : "12px",
+                    backgroundColor: "rgba(203, 190, 170, 0.12)",
+                    border: "1px dashed rgba(123, 98, 65, 0.08)",
+                  }}
+                />
+              )
+            }
+
+            const isToday = cell.date === todayDate
+            const isSelected = cell.date === selectedDate
+            const completionStatus = completedArchiveDates[cell.date] ?? {
+              easy: false,
+              hard: false,
+            }
+            const isEasyCompleted = completionStatus.easy
+            const isHardCompleted = completionStatus.hard
+            const isCompleted = isEasyCompleted || isHardCompleted
+            const hasPuzzle = Boolean(cell.puzzleDate)
+
+            if (!hasPuzzle) {
+              return (
+                <div
+                  key={cell.date}
+                  style={{
+                    aspectRatio: "1 / 1",
+                    borderRadius: isCompactMobile ? "11px" : "12px",
+                    backgroundColor: "rgba(203, 190, 170, 0.18)",
+                    border: "1px solid rgba(123, 98, 65, 0.08)",
+                    color: "#a08b73",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: isCompactMobile ? "11px" : "12px",
+                    fontWeight: 700,
+                  }}
+                >
+                  {Number(cell.date.slice(-2))}
+                </div>
+              )
+            }
+
+            return (
+              <button
+                key={cell.date}
+                onClick={() => selectPuzzleDate(cell.date!)}
+                title={formatDisplayDate(cell.date)}
+                style={{
+                  aspectRatio: "1 / 1",
+                  borderRadius: isCompactMobile ? "11px" : "12px",
+                  border: isSelected
+                    ? "2px solid #5f4221"
+                    : isToday
+                      ? "2px solid #b98f58"
+                      : "1px solid rgba(123, 98, 65, 0.18)",
+                  backgroundColor: isCompleted ? "#7aad2a" : "#efe2c7",
+                  color: isCompleted ? "#fffaf1" : "#2f2419",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                  fontSize: isCompactMobile ? "11px" : "12px",
+                  display: "grid",
+                  placeItems: "center",
+                  boxShadow: isCompleted
+                    ? "0 8px 16px rgba(114, 173, 45, 0.18)"
+                    : isToday
+                      ? "0 6px 14px rgba(185, 143, 88, 0.16)"
+                      : "none",
+                  position: "relative",
+                  transition: reducedMotionEnabled ? undefined : "transform 140ms ease, box-shadow 140ms ease",
+                  transform: isSelected ? "translateY(-1px)" : "translateY(0)",
+                  overflow: "hidden",
+                }}
+              >
+                {isCompleted && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background:
+                        isEasyCompleted && isHardCompleted
+                          ? "linear-gradient(90deg, #7aad2a 0%, #7aad2a 50%, #5f4221 50%, #5f4221 100%)"
+                          : isHardCompleted
+                            ? "#5f4221"
+                            : "#7aad2a",
+                    }}
+                  />
+                )}
+                <span
+                  style={{
+                    position: "relative",
+                    zIndex: 1,
+                    color: isCompleted ? "#fffaf1" : "#2f2419",
+                  }}
+                >
+                  {Number(cell.date.slice(-2))}
+                </span>
+                {isToday && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "4px",
+                      right: "4px",
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "999px",
+                      backgroundColor: isCompleted ? "#fffaf1" : "#b98f58",
+                      zIndex: 1,
+                    }}
+                  />
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -1986,7 +2459,7 @@ export default function Home() {
           : "clamp(12px, 4vw, 32px)",
         fontFamily: "var(--font-sans)",
         color: "#2f2419",
-        animation: "fade-up 300ms ease both",
+        animation: reducedMotionEnabled ? undefined : "fade-up 300ms ease both",
         overflow: isCompactMobile ? "hidden" : undefined,
       }}
     >
@@ -2141,6 +2614,24 @@ export default function Home() {
               <p style={{ margin: 0, fontSize: isCompactMobile ? "15px" : "17px", color: "#5b4630", maxWidth: "40ch", lineHeight: 1.45 }}>
                 A lexicon is the vocabulary of a language, speaker, or subject.
               </p>
+              <div
+                style={{
+                  marginTop: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: isCompactMobile ? "8px 12px" : "9px 14px",
+                  borderRadius: "999px",
+                  background: "rgba(255,250,240,0.92)",
+                  border: "1px solid rgba(123, 98, 65, 0.14)",
+                  fontSize: isCompactMobile ? "12px" : "13px",
+                  color: "#6d5537",
+                  fontWeight: 700,
+                }}
+              >
+                <span style={{ opacity: 0.72, textTransform: "uppercase", letterSpacing: "0.06em" }}>Next puzzle</span>
+                <span style={{ color: "#2f2419", fontWeight: 800 }}>{hasMounted ? resetCountdown : "--:--:--"}</span>
+              </div>
             </div>
 
             <div
@@ -2377,6 +2868,16 @@ export default function Home() {
                 }}
               >
                 {todayDisplayDate}
+              </div>
+              <div
+                style={{
+                  marginTop: "10px",
+                  fontSize: isCompactMobile ? "14px" : "15px",
+                  color: "#4f384b",
+                  fontWeight: 700,
+                }}
+              >
+                Next puzzle in {hasMounted ? resetCountdown : "--:--:--"}
               </div>
               <div
                 style={{
@@ -2669,6 +3170,45 @@ export default function Home() {
         {statsPanel}
         {archivePanel}
 
+        {viewMode === "game" && uiFeedback && (
+          <div
+            key={`${uiFeedback.kind}-${uiFeedback.tick}`}
+            style={{
+              position: "fixed",
+              top: isCompactMobile ? "max(60px, calc(env(safe-area-inset-top) + 48px))" : "24px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              padding: isCompactMobile ? "8px 12px" : "9px 14px",
+              borderRadius: "999px",
+              background:
+                uiFeedback.kind === "win"
+                  ? "linear-gradient(180deg, rgba(112,173,45,0.98) 0%, rgba(79,143,24,0.98) 100%)"
+                  : uiFeedback.kind === "submit"
+                  ? "linear-gradient(180deg, rgba(32,41,57,0.96) 0%, rgba(18,24,36,0.98) 100%)"
+                  : uiFeedback.kind === "hint"
+                  ? "linear-gradient(180deg, rgba(88,122,63,0.96) 0%, rgba(60,90,41,0.98) 100%)"
+                  : "linear-gradient(180deg, rgba(109,85,55,0.96) 0%, rgba(79,59,35,0.98) 100%)",
+              color: "#fffaf1",
+              fontSize: isCompactMobile ? "12px" : "13px",
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              boxShadow: "0 14px 28px rgba(34, 25, 13, 0.18)",
+              zIndex: 35,
+              pointerEvents: "none",
+              animation: reducedMotionEnabled ? undefined : "action-feedback-pop 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+            }}
+          >
+            {uiFeedback.kind === "submit"
+              ? "Move submitted"
+              : uiFeedback.kind === "hint"
+              ? "Hint used"
+              : uiFeedback.kind === "recall"
+              ? "Tiles recalled"
+              : "Puzzle solved"}
+          </div>
+        )}
+
         <div
           style={{
             background: isCompactMobile ? "transparent" : "rgba(255,250,240,0.88)",
@@ -2778,7 +3318,13 @@ export default function Home() {
                 border: "1px solid rgba(98, 128, 76, 0.22)",
                 borderRadius: isCompactMobile ? "18px" : "22px",
                 boxShadow: "0 20px 40px rgba(84, 116, 66, 0.16)",
-                animation: "pop-in-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+                animation: reducedMotionEnabled
+                    ? undefined
+                    :
+                  (
+                  uiFeedback?.kind === "win"
+                    ? "win-celebration-card 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both"
+                    : "pop-in-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both"),
               }}
             >
             <button
@@ -3267,7 +3813,12 @@ export default function Home() {
                       touchAction: "none",
                       WebkitUserSelect: "none",
                       userSelect: "none",
-                      animation: isRecentlyPlacedTile ? "tile-place-pop 220ms cubic-bezier(0.2, 0.8, 0.2, 1)" : undefined,
+                      animation:
+                        reducedMotionEnabled
+                          ? undefined
+                          : isRecentlyPlacedTile
+                          ? "tile-place-pop 220ms cubic-bezier(0.2, 0.8, 0.2, 1)"
+                          : undefined,
                       opacity:
                         draggedPlacedTile &&
                         draggedPlacedTile.row === row &&
@@ -3708,6 +4259,12 @@ export default function Home() {
                           color: "#2f2419",
                           fontWeight: 700,
                           textAlign: "left",
+                          animation:
+                            reducedMotionEnabled
+                              ? undefined
+                              : uiFeedback?.kind === "hint"
+                              ? "action-button-bounce 320ms ease"
+                              : undefined,
                         }}
                       >
                         {hintLevel === 0 ? "Show Hint" : hintLevel === 1 ? "Place Hint Tile" : "Hint Complete"}
@@ -3736,21 +4293,22 @@ export default function Home() {
 
                       <button
                         onClick={() => {
-                          setSoundMuted((prev) => !prev)
+                          setShowSettings(true)
+                          setShowMoreActions(false)
                         }}
                         style={{
                           padding: "10px 12px",
                           fontSize: "14px",
                           borderRadius: "14px",
                           border: "1px solid rgba(123, 98, 65, 0.2)",
-                          backgroundColor: soundMuted ? "#ddd6c8" : "#efe2c7",
+                          backgroundColor: "#efe2c7",
                           cursor: "pointer",
                           color: "#2f2419",
                           fontWeight: 700,
                           textAlign: "left",
                         }}
                       >
-                        {soundMuted ? "Sound Off" : "Sound On"}
+                        Settings
                       </button>
 
                       <button
@@ -3814,6 +4372,12 @@ export default function Home() {
                     color: "#2f2419",
                     fontWeight: 800,
                     boxShadow: isCompactMobile ? "none" : undefined,
+                    animation:
+                      reducedMotionEnabled
+                        ? undefined
+                        : uiFeedback?.kind === "recall"
+                        ? "action-button-bounce 320ms ease"
+                        : undefined,
                   }}
                 >
                   Recall
@@ -3854,6 +4418,12 @@ export default function Home() {
                     color: isCompactMobile ? "#fffaf1" : gameOver ? "#5f5448" : "#fffaf1",
                     fontWeight: 900,
                     boxShadow: isCompactMobile ? "none" : gameOver ? "none" : "0 10px 20px rgba(23,18,13,0.25)",
+                    animation:
+                      reducedMotionEnabled
+                        ? undefined
+                        : uiFeedback?.kind === "submit" || uiFeedback?.kind === "win"
+                        ? "action-button-bounce 340ms ease"
+                        : undefined,
                   }}
                 >
                   {isCompactMobile ? "Submit" : "Submit Move"}
@@ -3904,6 +4474,133 @@ export default function Home() {
           >
             {touchDrag.isBlank ? 0 : LETTER_SCORES[touchDrag.letter] || 0}
           </span>
+        </div>
+      )}
+
+      {showSettings && (
+        <div
+          onClick={() => setShowSettings(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10001,
+            padding: "16px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: "#fffaf0",
+              borderRadius: "18px",
+              padding: isCompactMobile ? "20px 18px" : "24px",
+              maxWidth: "440px",
+              width: "100%",
+              border: "1px solid rgba(123, 98, 65, 0.18)",
+              boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
+              color: "#2f2419",
+              animation: reducedMotionEnabled ? undefined : "pop-in-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "18px" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "22px" }}>Settings</h2>
+                <div style={{ fontSize: "13px", color: "#6d5537", marginTop: "4px" }}>
+                  Tune sound, haptics, and motion.
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(123, 98, 65, 0.16)",
+                  backgroundColor: "#f5ead6",
+                  cursor: "pointer",
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  color: "#2f2419",
+                }}
+                aria-label="Close settings"
+              >
+                ×
+              </button>
+            </div>
+
+            {[
+              {
+                label: "Sound effects",
+                description: "Play tones for tile placement, actions, and wins.",
+                checked: !soundMuted,
+                onChange: () => setSoundMuted((prev) => !prev),
+              },
+              {
+                label: "Haptics",
+                description: "Use vibration feedback on supported mobile devices.",
+                checked: hapticsEnabled,
+                onChange: () => setHapticsEnabled((prev) => !prev),
+              },
+              {
+                label: "Reduced motion",
+                description: "Tone down pop, bounce, and celebration animations.",
+                checked: reducedMotionEnabled,
+                onChange: () => setReducedMotionEnabled((prev) => !prev),
+              },
+            ].map((setting, index) => (
+              <button
+                key={setting.label}
+                onClick={setting.onChange}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "14px",
+                  padding: "14px 0",
+                  background: "transparent",
+                  border: "none",
+                  borderTop: index === 0 ? "1px solid rgba(123, 98, 65, 0.12)" : "1px solid rgba(123, 98, 65, 0.12)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  color: "#2f2419",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "16px", fontWeight: 800 }}>{setting.label}</div>
+                  <div style={{ marginTop: "4px", fontSize: "13px", lineHeight: 1.4, color: "#6d5537" }}>
+                    {setting.description}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    width: "54px",
+                    height: "30px",
+                    borderRadius: "999px",
+                    backgroundColor: setting.checked ? "#7aad2a" : "#d9cfbf",
+                    padding: "3px",
+                    display: "flex",
+                    justifyContent: setting.checked ? "flex-end" : "flex-start",
+                    flexShrink: 0,
+                    transition: reducedMotionEnabled ? "none" : "background-color 160ms ease",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "999px",
+                      backgroundColor: "#fffaf1",
+                      boxShadow: "0 2px 6px rgba(34, 25, 13, 0.16)",
+                    }}
+                  />
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

@@ -270,21 +270,67 @@ type HardSlot = {
   word: string
 }
 
-const hardModeLayouts: HardSlot[][] = [
+const HARD_BOARD_SIZE = 11
+
+type HardTransform = {
+  transpose?: boolean
+}
+
+const hardModeBlueprints: HardSlot[][] = [
   [
-    { direction: "across", row: 2, col: 5, word: "BALL" },
-    { direction: "across", row: 4, col: 5, word: "LOAN" },
-    { direction: "across", row: 6, col: 5, word: "NOTE" },
-    { direction: "across", row: 8, col: 5, word: "EARN" },
-    { direction: "down", row: 2, col: 5, word: "BALANCE" },
-    { direction: "down", row: 2, col: 8, word: "LANTERN" },
+    { direction: "across", row: 2, col: 1, word: "SPEAK" },
+    { direction: "across", row: 5, col: 2, word: "PLANETS" },
+    { direction: "across", row: 8, col: 4, word: "MUSED" },
+    { direction: "down", row: 1, col: 3, word: "PEARL" },
+    { direction: "down", row: 3, col: 6, word: "WHEELS" },
+    { direction: "down", row: 5, col: 8, word: "SAND" },
+  ],
+  [
+    { direction: "across", row: 1, col: 4, word: "SPARK" },
+    { direction: "across", row: 4, col: 2, word: "PLANETS" },
+    { direction: "across", row: 7, col: 1, word: "ASHORE" },
+    { direction: "down", row: 1, col: 5, word: "PAINTER" },
+    { direction: "down", row: 4, col: 3, word: "LIGHT" },
+    { direction: "down", row: 4, col: 8, word: "STAR" },
+  ],
+  [
+    { direction: "across", row: 1, col: 1, word: "THUMB" },
+    { direction: "across", row: 4, col: 2, word: "BRANCH" },
+    { direction: "across", row: 7, col: 3, word: "KITES" },
+    { direction: "down", row: 1, col: 5, word: "BLANKET" },
+    { direction: "down", row: 4, col: 3, word: "ROCKET" },
+    { direction: "down", row: 4, col: 7, word: "HENS" },
   ],
 ]
 
-function buildHardLayout(slots: HardSlot[]) {
+const hardModeTransforms: HardTransform[] = [
+  {},
+  { transpose: true },
+]
+
+function transposeHardSlot(slot: HardSlot): HardSlot {
+  return {
+    ...slot,
+    direction: slot.direction === "across" ? "down" : "across",
+    row: slot.col,
+    col: slot.row,
+  }
+}
+
+function transformHardSlot(slot: HardSlot, transform: HardTransform) {
+  let transformed = { ...slot }
+
+  if (transform.transpose) {
+    transformed = transposeHardSlot(transformed)
+  }
+
+  return transformed
+}
+
+function buildHardLayout(slots: HardSlot[], transform: HardTransform = {}) {
   const cells = new Map<string, PuzzleCell>()
 
-  for (const slot of slots) {
+  for (const slot of slots.map((item) => transformHardSlot(item, transform))) {
     for (let index = 0; index < slot.word.length; index++) {
       const row = slot.direction === "across" ? slot.row : slot.row + index
       const col = slot.direction === "across" ? slot.col + index : slot.col
@@ -303,30 +349,46 @@ function buildHardLayout(slots: HardSlot[]) {
   return Array.from(cells.values())
 }
 
-function transformHardLayout(cells: PuzzleCell[], transform: number) {
-  return cells.map((cell) => {
-    switch (transform) {
-      case 1:
-        return { row: cell.col, col: cell.row, letter: cell.letter }
-      default:
-        return cell
-    }
-  })
-}
-
 function getHardModeLayoutForDate(date: string) {
   const random = createSeededRandom(`hard-${date}`)
-  const slotLayout = hardModeLayouts[Math.floor(random() * hardModeLayouts.length)]
-  const baseLayout = buildHardLayout(slotLayout)
-  const transformedLayout = transformHardLayout(baseLayout, Math.floor(random() * 2))
+  const slotLayout = hardModeBlueprints[Math.floor(random() * hardModeBlueprints.length)]
+  const transform = hardModeTransforms[Math.floor(random() * hardModeTransforms.length)]
+  const transformedLayout = buildHardLayout(slotLayout, transform)
 
   for (const cell of transformedLayout) {
-    if (cell.row < 0 || cell.row >= 11 || cell.col < 0 || cell.col >= 11) {
+    if (cell.row < 0 || cell.row >= HARD_BOARD_SIZE || cell.col < 0 || cell.col >= HARD_BOARD_SIZE) {
       throw new Error(`Generated hard puzzle for ${date} produced out-of-bounds cell.`)
     }
   }
 
   return transformedLayout
+}
+
+const hardPuzzleValidationOptions = {
+  minWords: 6,
+  maxWords: 10,
+  minLength: 3,
+  maxLength: 7,
+} as const
+
+function validateHardBlueprints() {
+  for (const [blueprintIndex, blueprint] of hardModeBlueprints.entries()) {
+    for (const [transformIndex, transform] of hardModeTransforms.entries()) {
+      validatePuzzleLayout(
+        {
+          id: `hard-blueprint-${blueprintIndex + 1}-transform-${transformIndex + 1}`,
+          date: "0000-00-00",
+          boardSize: HARD_BOARD_SIZE,
+          rack: [],
+          filledCells: buildHardLayout(blueprint, transform),
+          bonusCells: hardModeBonusCells,
+          optimalScore: 0,
+          optimalWords: [],
+        },
+        hardPuzzleValidationOptions
+      )
+    }
+  }
 }
 
 const harderFutureThreeWordLayouts: PuzzleCell[][] = [
@@ -998,6 +1060,8 @@ for (const puzzle of DAILY_PUZZLES) {
   validatePuzzleLayout(puzzle)
 }
 
+validateHardBlueprints()
+
 export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
   const easyPuzzle = DAILY_PUZZLES.find((puzzle) => puzzle.date === date) || DAILY_PUZZLES[0]
   const generatedRack = generateRackForSeed(easyPuzzle.rack.length, `${date}-${mode}-rack`)
@@ -1012,13 +1076,13 @@ export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
   const hardPuzzle: DailyPuzzle = {
     ...easyPuzzle,
     id: `${easyPuzzle.id}-hard`,
-    boardSize: 11,
+    boardSize: HARD_BOARD_SIZE,
     rack: generatedRack,
     filledCells: getHardModeLayoutForDate(date),
     bonusCells: hardModeBonusCells,
   }
 
-  validatePuzzleLayout(hardPuzzle, { minWords: 6, maxWords: 10, minLength: 3, maxLength: 7 })
+  validatePuzzleLayout(hardPuzzle, hardPuzzleValidationOptions)
   return hardPuzzle
 }
 
