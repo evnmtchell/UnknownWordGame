@@ -1425,6 +1425,23 @@ export default function Home() {
     setDraggedTile(null)
     setDraggedPlacedTile(null)
     setRackDropIndex(null)
+
+    // Save to DB directly on submit
+    const updatedHistory = [...attemptHistory, newAttempt]
+    saveSession({
+      date: puzzle.date,
+      mode: loadedGameConfig.mode,
+      attempts_left: newAttemptsLeft,
+      best_score: newBestScore,
+      attempt_history: updatedHistory,
+      hint_used: hintLevel > 0,
+      hint_level: hintLevel,
+      completed: newAttemptsLeft === 0,
+      rating: null,
+      submitted_words: wordResults,
+      submitted_score: totalScore,
+      message: "",
+    })
   }
 
   function undoLastTile() {
