@@ -3792,6 +3792,76 @@ export default function Home() {
           </div>
         </div>
 
+        {submittedWords.length > 0 && (
+          <div style={{
+            padding: isCompactMobile ? "12px 14px" : "14px 18px",
+            background: "rgba(255,250,240,0.85)",
+            borderRadius: "14px",
+            border: "1px solid rgba(123, 98, 65, 0.12)",
+            marginBottom: "10px",
+          }}>
+            <div style={{ fontWeight: 800, fontSize: isCompactMobile ? "13px" : "14px", color: "#2f2419", marginBottom: "6px" }}>
+              Words formed
+            </div>
+            {submittedWords.map((w, i) => (
+              <div key={i} style={{ fontSize: isCompactMobile ? "13px" : "14px", color: "#5b4630", marginLeft: "4px" }}>
+                {w.word} – {w.score} points
+              </div>
+            ))}
+            <div style={{ fontWeight: 800, fontSize: isCompactMobile ? "13px" : "14px", color: "#2f2419", marginTop: "6px" }}>
+              Total: {submittedScore}
+            </div>
+          </div>
+        )}
+
+        {attemptHistory.length > 0 && (
+          <div style={{
+            padding: isCompactMobile ? "12px 14px" : "14px 18px",
+            background: "rgba(255,250,240,0.85)",
+            borderRadius: "14px",
+            border: "1px solid rgba(123, 98, 65, 0.12)",
+            marginBottom: "10px",
+          }}>
+            <div style={{ fontWeight: 800, fontSize: isCompactMobile ? "13px" : "14px", color: "#2f2419", marginBottom: "6px" }}>
+              Attempts
+            </div>
+            {attemptHistory.map((attempt, index) => (
+              <div key={index} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: isCompactMobile ? "13px" : "14px", color: "#5b4630", marginBottom: "4px" }}>
+                <span style={{
+                  width: "14px", height: "14px", borderRadius: "3px", flexShrink: 0,
+                  backgroundColor: attempt.totalScore >= solution.bestScore ? "#4caf50"
+                    : attempt.totalScore >= solution.bestScore * 0.75 ? "#7aad2a"
+                    : attempt.totalScore >= solution.bestScore * 0.5 ? "#c8b040"
+                    : "#bbb",
+                }} />
+                <span>
+                  {getAttemptLabel(index, attempt.totalScore)}: {attempt.words.map(w => w.word).join(", ")} – <strong>{attempt.totalScore} points</strong>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {canShare && (
+          <div style={{ marginBottom: "10px" }}>
+            <button
+              onClick={shareResults}
+              style={{
+                padding: isCompactMobile ? "10px 18px" : "12px 22px",
+                borderRadius: "10px",
+                border: "1px solid rgba(123, 98, 65, 0.2)",
+                backgroundColor: "#efe2c7",
+                cursor: "pointer",
+                fontSize: isCompactMobile ? "14px" : "15px",
+                fontWeight: 700,
+                color: "#2f2419",
+              }}
+            >
+              Share Results
+            </button>
+          </div>
+        )}
+
         {gameOver && showResultsModal && (
           <div
             onClick={() => setShowResultsModal(false)}
