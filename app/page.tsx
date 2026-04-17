@@ -519,13 +519,17 @@ export default function Home() {
     console.log("[lexicon] Loading session for", puzzle.date, loadedGameConfig.mode)
     loadSession(puzzle.date, loadedGameConfig.mode).then((apiSession) => {
       console.log("[lexicon] API session result:", apiSession)
-      if (apiSession && apiSession.attempt_history && (apiSession.attempt_history as unknown[]).length > 0) {
+      if (apiSession && apiSession.attempt_history && Array.isArray(apiSession.attempt_history) && apiSession.attempt_history.length > 0) {
+        console.log("[lexicon] Applying API session:", apiSession.best_score, "score,", apiSession.attempts_left, "attempts left")
         applySessionData({
           attemptsLeft: apiSession.attempts_left,
           bestScore: apiSession.best_score,
           attemptHistory: apiSession.attempt_history as AttemptResult[],
+          submittedWords: apiSession.attempt_history.length > 0 ? (apiSession.attempt_history[apiSession.attempt_history.length - 1] as AttemptResult).words : [],
+          submittedScore: apiSession.attempt_history.length > 0 ? (apiSession.attempt_history[apiSession.attempt_history.length - 1] as AttemptResult).totalScore : 0,
           hintUsed: apiSession.hint_used,
           hintLevel: apiSession.hint_level,
+          message: `Restored from your account. Best score: ${apiSession.best_score}.`,
         })
       } else {
         // Fall back to localStorage
