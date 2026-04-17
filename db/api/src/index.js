@@ -400,8 +400,13 @@ app.get("/api/puzzles/:date", async (req, res) => {
   }
 })
 
-// POST /api/puzzles — insert/update a puzzle (admin)
+// POST /api/puzzles — insert/update a puzzle (admin only)
 app.post("/api/puzzles", async (req, res) => {
+  const adminKey = req.headers["x-admin-key"]
+  if (adminKey !== process.env.JWT_SECRET) {
+    return res.status(403).json({ error: "Admin access required" })
+  }
+
   const body = req.body
 
   if (!body.date || !body.mode) {
