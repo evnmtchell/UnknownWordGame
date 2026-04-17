@@ -83,7 +83,8 @@ jobs:
             echo "APPLE_CLIENT_ID=${APPLE_CLIENT_ID}" >> /var/lib/secrets/plantos-db.env
             echo "APPLE_TEAM_ID=${APPLE_TEAM_ID}" >> /var/lib/secrets/plantos-db.env
             echo "APPLE_KEY_ID=${APPLE_KEY_ID}" >> /var/lib/secrets/plantos-db.env
-            printf "APPLE_PRIVATE_KEY=%s" "${APPLE_PRIVATE_KEY}" >> /var/lib/secrets/plantos-db.env
+            printf '%s\n' "${APPLE_PRIVATE_KEY}" > /var/lib/secrets/apple-key.p8
+            chmod 600 /var/lib/secrets/apple-key.p8
             chmod 600 /var/lib/secrets/plantos-db.env
 
             # Update the PostgreSQL user password if DB is already running

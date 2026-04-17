@@ -3,6 +3,7 @@ import cors from "cors"
 import pg from "pg"
 import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
+import { readFileSync } from "fs"
 
 const { Pool } = pg
 
@@ -259,13 +260,21 @@ app.get("/auth/google/callback", async (req, res) => {
 // APPLE SSO
 // ==========================================
 
+let applePrivateKey = null
+try {
+  applePrivateKey = readFileSync("/var/lib/secrets/apple-key.p8", "utf8")
+} catch {
+  console.warn("Apple private key not found at /var/lib/secrets/apple-key.p8 — Apple SSO disabled")
+}
+
 function generateAppleClientSecret() {
   const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID
   const APPLE_KEY_ID = process.env.APPLE_KEY_ID
-  const APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY
   const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID
 
-  return jwt.sign({}, APPLE_PRIVATE_KEY, {
+  if (!applePrivateKey) throw new Error("Apple private key not configured")
+
+  return jwt.sign({}, applePrivateKey, {
     algorithm: "ES256",
     expiresIn: "180d",
     audience: "https://appleid.apple.com",
