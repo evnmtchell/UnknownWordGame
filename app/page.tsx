@@ -711,15 +711,15 @@ export default function Home() {
     return () => document.removeEventListener("touchmove", onTouchMove)
   }, [touchDragActivationDistance])
 
-  const hasUserActed = useRef(false)
-  useEffect(() => {
-    if (attemptHistory.length > 0 || hintLevel > 0 || attemptsLeft < 3) {
-      hasUserActed.current = true
-    }
-  }, [attemptHistory, hintLevel, attemptsLeft])
+  const initialLoadDone = useRef(false)
 
   useEffect(() => {
-    if (!hasLoadedSave || !hasUserActed.current) return
+    if (!hasLoadedSave) return
+    // Skip the first render cycle after load to avoid overwriting with defaults
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true
+      return
+    }
 
     const dataToSave: SavedGameState = {
       attemptsLeft,
