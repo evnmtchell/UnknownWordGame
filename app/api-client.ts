@@ -294,6 +294,17 @@ export function storeArrivedFromRef() {
   }
 }
 
+export async function loadPuzzleOptimal(date: string, mode: string): Promise<{ optimal_score: number; optimal_words: string[] } | null> {
+  try {
+    const res = await authFetch(`/api/puzzles/${date}?mode=${mode}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    return { optimal_score: data.optimal_score, optimal_words: data.optimal_words }
+  } catch {
+    return null
+  }
+}
+
 export async function createShareLink(puzzleDate: string, puzzleMode: string, bestScore: number): Promise<string | null> {
   try {
     const arrivedFromRef = localStorage.getItem(ARRIVED_FROM_REF_KEY)

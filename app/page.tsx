@@ -5,7 +5,7 @@ import { VALID_WORDS } from "./words"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
-import { saveSession, saveStats, loadSession, loadStats, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink } from "./api-client"
+import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -316,24 +316,45 @@ export default function Home() {
   const movePlacedTileOnBoardRef = useRef<((tile: DraggedPlacedTile, row: number, col: number) => void) | null>(null)
   const returnPlacedTileToRackRef = useRef<((tile: DraggedPlacedTile) => void) | null>(null)
 
+  const [puzzleOptimal, setPuzzleOptimal] = useState<{ score: number; words: string[] } | null>(null)
   const puzzle = useMemo(
     () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode),
     [loadedGameConfig]
   )
   // Use pre-computed optimal score/words when available, defer solver to hint usage
   const precomputedSolution = useMemo(() => {
-    if (puzzle.optimalScore > 0) {
-      return { bestScore: puzzle.optimalScore, bestWords: puzzle.optimalWords, bestPlacement: [] as { row: number; col: number; letter: string; isBlank: boolean }[] }
+    const score = puzzleOptimal?.score || puzzle.optimalScore
+    const words = puzzleOptimal?.words || puzzle.optimalWords
+    if (score > 0) {
+      return { bestScore: score, bestWords: words, bestPlacement: [] as { row: number; col: number; letter: string; isBlank: boolean }[] }
     }
     return null
-  }, [puzzle])
+  }, [puzzle, puzzleOptimal])
   const fullSolutionRef = useRef<{ bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] } | null>(null)
-  const solution = useMemo(() => {
-    if (precomputedSolution) return precomputedSolution
-    const solved = solvePuzzle(puzzle)
-    fullSolutionRef.current = solved
-    return solved
-  }, [puzzle, precomputedSolution])
+  const [solverResult, setSolverResult] = useState<{ bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] } | null>(null)
+  const solverPuzzleIdRef = useRef("")
+
+  // Run solver only when no pre-computed score is available, and do it async
+  useEffect(() => {
+    const puzzleId = `${puzzle.id}-${puzzle.date}-${loadedGameConfig.mode}`
+    if (puzzleId === solverPuzzleIdRef.current) return
+    if (precomputedSolution) {
+      solverPuzzleIdRef.current = puzzleId
+      setSolverResult(null)
+      return
+    }
+    solverPuzzleIdRef.current = puzzleId
+    // Defer solver to next tick so API has a chance to respond
+    const timer = setTimeout(() => {
+      if (precomputedSolution) return // API responded in time
+      const solved = solvePuzzle(puzzle)
+      fullSolutionRef.current = solved
+      setSolverResult(solved)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [puzzle, precomputedSolution, loadedGameConfig.mode])
+
+  const solution = precomputedSolution || solverResult || { bestScore: 0, bestWords: [] as string[], bestPlacement: [] as { row: number; col: number; letter: string; isBlank: boolean }[] }
 
   const isCompactMobile =
     viewportSize.width > 0 &&
@@ -1755,6 +1776,14 @@ export default function Home() {
 
   function selectPuzzleDate(date: string, mode: "easy" | "hard" = selectedMode) {
     const newPuzzle = getPuzzleByDate(date, mode)
+    setPuzzleOptimal(null)
+    fullSolutionRef.current = null
+    // Fetch optimal score from DB to skip solver
+    loadPuzzleOptimal(date, mode).then((opt) => {
+      if (opt && opt.optimal_score > 0) {
+        setPuzzleOptimal({ score: opt.optimal_score, words: opt.optimal_words })
+      }
+    }).catch(() => {})
     setLoadedGameConfig({ date, mode })
     setSelectedMode(mode)
     setViewMode("game")
