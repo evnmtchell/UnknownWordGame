@@ -2526,6 +2526,10 @@ export default function Home() {
     </div>
   )
 
+  if (!hasMounted) {
+    return <main style={{ minHeight: "100dvh", backgroundColor: "#e8dcc8" }} />
+  }
+
   return (
     <main
       style={{
