@@ -479,11 +479,11 @@ export default function Home() {
     const oauthResult = handleOAuthCallback()
     if (oauthResult) {
       setCurrentUser({ username: oauthResult.username, anon: false })
-      return
-    }
-    const auth = getAuthState()
-    if (auth) {
-      setCurrentUser({ username: auth.username, anon: auth.anon })
+    } else {
+      const auth = getAuthState()
+      if (auth) {
+        setCurrentUser({ username: auth.username, anon: auth.anon })
+      }
     }
   }, [])
 
@@ -2794,7 +2794,7 @@ export default function Home() {
                   Account
                 </div>
                 <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  {currentUser && !currentUser.anon ? currentUser.username : "Sign In"}
+                  {hasMounted ? (currentUser && !currentUser.anon ? currentUser.username : "Sign In") : "Sign In"}
                 </div>
               </button>
             </div>
