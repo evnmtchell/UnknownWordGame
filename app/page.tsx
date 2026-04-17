@@ -3079,8 +3079,12 @@ export default function Home() {
 
               <button
                 onClick={() => {
-                  setViewMode("archive")
-                  setShowStats(false)
+                  if (!currentUser || currentUser.anon) {
+                    setShowAuth(true); setAuthMode("login"); setAuthError("")
+                  } else {
+                    setViewMode("archive")
+                    setShowStats(false)
+                  }
                 }}
                 style={homeActionButtonStyle}
               >
@@ -3094,7 +3098,11 @@ export default function Home() {
 
               <button
                 onClick={() => {
-                  setShowStats((prev) => !prev)
+                  if (!currentUser || currentUser.anon) {
+                    setShowAuth(true); setAuthMode("login"); setAuthError("")
+                  } else {
+                    setShowStats((prev) => !prev)
+                  }
                 }}
                 style={homeActionButtonStyle}
               >
