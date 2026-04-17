@@ -237,3 +237,40 @@ export async function saveStats(data: {
     console.warn("[lexicon-api] saveStats error:", err)
   }
 }
+
+export async function loadSession(date: string, mode: string): Promise<{
+  attempts_left: number
+  best_score: number
+  attempt_history: unknown[]
+  hint_used: boolean
+  hint_level: number
+  completed: boolean
+  rating: string | null
+} | null> {
+  try {
+    const res = await authFetch(`/api/sessions?date=${date}&mode=${mode}`)
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+export async function loadStats(): Promise<{
+  games_played: number
+  current_streak: number
+  max_streak: number
+  perfect_current_streak: number
+  perfect_max_streak: number
+  last_played_date: string | null
+  last_perfect_date: string | null
+  rating_counts: Record<string, number>
+} | null> {
+  try {
+    const res = await authFetch("/api/stats")
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}

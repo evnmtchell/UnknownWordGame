@@ -5,7 +5,7 @@ import { VALID_WORDS } from "./words"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
-import { saveSession, saveStats, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback } from "./api-client"
+import { saveSession, saveStats, loadSession, loadStats, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -497,45 +497,89 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    const saved = localStorage.getItem(storageKey)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Partial<SavedGameState>
-        startTransition(() => {
-          if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
-          if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
-          if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
-          if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
-          if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
-          if (parsed.message) setMessage(parsed.message)
-          const savedHintLevel = parsed.hintLevel ?? (parsed.hintUsed ? 1 : 0)
-          if (savedHintLevel > 0) {
-            setHintLevel(savedHintLevel)
-            setShowHint(false)
-          }
-          setHasLoadedSave(true)
-        })
-        if (parsed.attemptsLeft === 0) statsUpdatedRef.current = true
-      } catch {
-        // ignore bad saved data
-      }
-    } else {
+    function applySessionData(parsed: Partial<SavedGameState>) {
       startTransition(() => {
+        if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
+        if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
+        if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
+        if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
+        if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
+        if (parsed.message) setMessage(parsed.message)
+        const savedHintLevel = parsed.hintLevel ?? (parsed.hintUsed ? 1 : 0)
+        if (savedHintLevel > 0) {
+          setHintLevel(savedHintLevel)
+          setShowHint(false)
+        }
         setHasLoadedSave(true)
       })
+      if (parsed.attemptsLeft === 0) statsUpdatedRef.current = true
     }
 
-    try {
-      const savedStats = localStorage.getItem(STATS_KEY)
-      if (savedStats) {
-        const parsedStats = JSON.parse(savedStats) as GameStats
-        startTransition(() => {
-          setStats(parsedStats)
+    // Try loading from API first, fall back to localStorage
+    loadSession(puzzle.date, loadedGameConfig.mode).then((apiSession) => {
+      if (apiSession && apiSession.attempt_history && (apiSession.attempt_history as unknown[]).length > 0) {
+        applySessionData({
+          attemptsLeft: apiSession.attempts_left,
+          bestScore: apiSession.best_score,
+          attemptHistory: apiSession.attempt_history as AttemptResult[],
+          hintUsed: apiSession.hint_used,
+          hintLevel: apiSession.hint_level,
         })
+      } else {
+        // Fall back to localStorage
+        const saved = localStorage.getItem(storageKey)
+        if (saved) {
+          try {
+            applySessionData(JSON.parse(saved) as Partial<SavedGameState>)
+          } catch { /* ignore */ }
+        } else {
+          startTransition(() => { setHasLoadedSave(true) })
+        }
       }
-    } catch {
-      // ignore
-    }
+    }).catch(() => {
+      // API failed, use localStorage
+      const saved = localStorage.getItem(storageKey)
+      if (saved) {
+        try {
+          applySessionData(JSON.parse(saved) as Partial<SavedGameState>)
+        } catch { /* ignore */ }
+      } else {
+        startTransition(() => { setHasLoadedSave(true) })
+      }
+    })
+
+    // Load stats: try API first, fall back to localStorage
+    loadStats().then((apiStats) => {
+      if (apiStats && apiStats.games_played > 0) {
+        startTransition(() => {
+          setStats({
+            gamesPlayed: apiStats.games_played,
+            currentStreak: apiStats.current_streak,
+            maxStreak: apiStats.max_streak,
+            perfectCurrentStreak: apiStats.perfect_current_streak,
+            perfectMaxStreak: apiStats.perfect_max_streak,
+            lastPlayedDate: apiStats.last_played_date,
+            lastPerfectDate: apiStats.last_perfect_date,
+            ratingCounts: apiStats.rating_counts || defaultStats.ratingCounts,
+            puzzleHistory: [],
+          })
+        })
+      } else {
+        try {
+          const savedStats = localStorage.getItem(STATS_KEY)
+          if (savedStats) {
+            startTransition(() => { setStats(JSON.parse(savedStats) as GameStats) })
+          }
+        } catch { /* ignore */ }
+      }
+    }).catch(() => {
+      try {
+        const savedStats = localStorage.getItem(STATS_KEY)
+        if (savedStats) {
+          startTransition(() => { setStats(JSON.parse(savedStats) as GameStats) })
+        }
+      } catch { /* ignore */ }
+    })
 
     if (!localStorage.getItem("daily-word-game-tutorial-seen")) {
       startTransition(() => {
