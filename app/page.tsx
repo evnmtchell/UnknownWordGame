@@ -320,7 +320,20 @@ export default function Home() {
     () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode),
     [loadedGameConfig]
   )
-  const solution = useMemo(() => solvePuzzle(puzzle), [puzzle])
+  // Use pre-computed optimal score/words when available, defer solver to hint usage
+  const precomputedSolution = useMemo(() => {
+    if (puzzle.optimalScore > 0) {
+      return { bestScore: puzzle.optimalScore, bestWords: puzzle.optimalWords, bestPlacement: [] as { row: number; col: number; letter: string; isBlank: boolean }[] }
+    }
+    return null
+  }, [puzzle])
+  const fullSolutionRef = useRef<{ bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] } | null>(null)
+  const solution = useMemo(() => {
+    if (precomputedSolution) return precomputedSolution
+    const solved = solvePuzzle(puzzle)
+    fullSolutionRef.current = solved
+    return solved
+  }, [puzzle, precomputedSolution])
 
   const isCompactMobile =
     viewportSize.width > 0 &&
@@ -441,14 +454,20 @@ export default function Home() {
     () => new Map(puzzle.bonusCells.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.type])),
     [puzzle.bonusCells]
   )
-  const optimalCellSet = useMemo(
-    () => new Set(solution.bestPlacement.map((cell) => getBoardCellKey(cell.row, cell.col))),
-    [solution.bestPlacement]
-  )
-  const optimalLetterMap = useMemo(
-    () => new Map(solution.bestPlacement.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.letter])),
-    [solution.bestPlacement]
-  )
+  function getFullSolution() {
+    if (fullSolutionRef.current) return fullSolutionRef.current
+    const solved = solvePuzzle(puzzle)
+    fullSolutionRef.current = solved
+    return solved
+  }
+  const optimalCellSet = useMemo(() => {
+    const placement = hintLevel > 0 ? getFullSolution().bestPlacement : solution.bestPlacement
+    return new Set(placement.map((cell) => getBoardCellKey(cell.row, cell.col)))
+  }, [solution.bestPlacement, hintLevel])
+  const optimalLetterMap = useMemo(() => {
+    const placement = hintLevel > 0 ? getFullSolution().bestPlacement : solution.bestPlacement
+    return new Map(placement.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.letter]))
+  }, [solution.bestPlacement, hintLevel])
 
   function playPlacementSound() {
     if (typeof window === "undefined") return
@@ -2077,7 +2096,8 @@ export default function Home() {
   }
 
   function applySecondHint() {
-    const nextHintTile = solution.bestPlacement.find(
+    const fullSolution = getFullSolution()
+    const nextHintTile = fullSolution.bestPlacement.find(
       (cell) => !placedTiles.some((tile) => tile.row === cell.row && tile.col === cell.col)
     )
 
@@ -3845,7 +3865,7 @@ export default function Home() {
             <p>
               Best play: <strong>{solution.bestWords.join(", ") || "Unknown"}</strong>
             </p>
-            {solution.bestPlacement.length > 0 && (
+            {getFullSolution().bestPlacement.length > 0 && (
               <p style={{ fontSize: "13px", color: "#1d4ed8", margin: "4px 0 0" }}>
                 Blue tiles on the board show the optimal placement.
               </p>
