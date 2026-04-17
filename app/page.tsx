@@ -2177,10 +2177,7 @@ export default function Home() {
 
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-        await navigator.share({
-          title: header,
-          text,
-        })
+        await navigator.share({ text })
         setMessage("Results shared.")
         return
       }
