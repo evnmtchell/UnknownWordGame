@@ -321,40 +321,16 @@ export default function Home() {
     () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode),
     [loadedGameConfig]
   )
-  // Use pre-computed optimal score/words when available, defer solver to hint usage
-  const precomputedSolution = useMemo(() => {
+  type SolutionType = { bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] }
+  const fullSolutionRef = useRef<SolutionType | null>(null)
+
+  // Use optimal score from API/puzzle data — never run solver on load
+  const solution: SolutionType = useMemo(() => {
+    fullSolutionRef.current = null
     const score = puzzleOptimal?.score || puzzle.optimalScore
-    const words = puzzleOptimal?.words || puzzle.optimalWords
-    if (score > 0) {
-      return { bestScore: score, bestWords: words, bestPlacement: [] as { row: number; col: number; letter: string; isBlank: boolean }[] }
-    }
-    return null
+    const words = (puzzleOptimal?.words?.length ? puzzleOptimal.words : puzzle.optimalWords?.length ? puzzle.optimalWords : []) as string[]
+    return { bestScore: score || 0, bestWords: words, bestPlacement: [] }
   }, [puzzle, puzzleOptimal])
-  const fullSolutionRef = useRef<{ bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] } | null>(null)
-  const [solverResult, setSolverResult] = useState<{ bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] } | null>(null)
-  const solverPuzzleIdRef = useRef("")
-
-  // Run solver only when no pre-computed score is available, and do it async
-  useEffect(() => {
-    const puzzleId = `${puzzle.id}-${puzzle.date}-${loadedGameConfig.mode}`
-    if (puzzleId === solverPuzzleIdRef.current) return
-    if (precomputedSolution) {
-      solverPuzzleIdRef.current = puzzleId
-      setSolverResult(null)
-      return
-    }
-    solverPuzzleIdRef.current = puzzleId
-    // Defer solver to next tick so API has a chance to respond
-    const timer = setTimeout(() => {
-      if (precomputedSolution) return // API responded in time
-      const solved = solvePuzzle(puzzle)
-      fullSolutionRef.current = solved
-      setSolverResult(solved)
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [puzzle, precomputedSolution, loadedGameConfig.mode])
-
-  const solution = precomputedSolution || solverResult || { bestScore: 0, bestWords: [] as string[], bestPlacement: [] as { row: number; col: number; letter: string; isBlank: boolean }[] }
 
   const isCompactMobile =
     viewportSize.width > 0 &&
