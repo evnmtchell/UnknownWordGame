@@ -199,13 +199,17 @@ export async function saveSession(data: {
   message: string
 }): Promise<void> {
   try {
-    await authFetch("/api/sessions", {
+    const res = await authFetch("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
-  } catch {
-    // Silent fail — localStorage is the primary store for now
+    if (!res.ok) {
+      const err = await res.text()
+      console.warn("[lexicon-api] saveSession failed:", res.status, err)
+    }
+  } catch (err) {
+    console.warn("[lexicon-api] saveSession error:", err)
   }
 }
 
@@ -220,12 +224,16 @@ export async function saveStats(data: {
   rating_counts: Record<string, number>
 }): Promise<void> {
   try {
-    await authFetch("/api/stats", {
+    const res = await authFetch("/api/stats", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
-  } catch {
-    // Silent fail — localStorage is the primary store for now
+    if (!res.ok) {
+      const err = await res.text()
+      console.warn("[lexicon-api] saveStats failed:", res.status, err)
+    }
+  } catch (err) {
+    console.warn("[lexicon-api] saveStats error:", err)
   }
 }
