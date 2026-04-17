@@ -124,6 +124,7 @@ const STATS_KEY = "daily-word-game-stats"
 const SOUND_MUTED_KEY = "daily-word-game-sound-muted"
 const HAPTICS_ENABLED_KEY = "daily-word-game-haptics-enabled"
 const REDUCED_MOTION_KEY = "daily-word-game-reduced-motion"
+const NIGHT_MODE_KEY = "daily-word-game-night-mode"
 const HOME_BRAND_TILES = ["L", "E", "X", "I", "C", "O", "N"]
 
 function shuffleArray(items: RackSlot[]) {
@@ -413,6 +414,7 @@ export default function Home() {
   const [soundMuted, setSoundMuted] = useState(false)
   const [hapticsEnabled, setHapticsEnabled] = useState(true)
   const [reducedMotionEnabled, setReducedMotionEnabled] = useState(false)
+  const [nightModeEnabled, setNightModeEnabled] = useState(false)
   const [hasSavedTodayGame, setHasSavedTodayGame] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
@@ -666,6 +668,21 @@ export default function Home() {
     }
 
     try {
+      const savedNightMode = localStorage.getItem(NIGHT_MODE_KEY)
+      if (savedNightMode === null) {
+        setNightModeEnabled(
+          typeof window !== "undefined" &&
+            typeof window.matchMedia === "function" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+        )
+      } else {
+        setNightModeEnabled(savedNightMode === "1")
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
       setHasSavedTodayGame(Boolean(localStorage.getItem(`daily-word-game-${todayDate}`)))
     } catch {
       // ignore
@@ -695,6 +712,18 @@ export default function Home() {
       // ignore
     }
   }, [reducedMotionEnabled])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NIGHT_MODE_KEY, nightModeEnabled ? "1" : "0")
+    } catch {
+      // ignore
+    }
+
+    if (typeof document === "undefined") return
+
+    document.documentElement.dataset.theme = nightModeEnabled ? "night" : "day"
+  }, [nightModeEnabled])
 
   useEffect(() => {
     try {
@@ -2081,12 +2110,43 @@ export default function Home() {
       return `${icon} ${getAttemptLabel(index, attempt.totalScore)}: ${attempt.totalScore}`
     })
     const text = [header, summary, hintSummary, "", ...lines].filter(Boolean).join("\n")
+    const shareUrl =
+      typeof window !== "undefined" ? window.location.href : undefined
 
     try {
-      await navigator.clipboard.writeText(text)
-      setMessage("Results copied to clipboard.")
-    } catch {
-      setMessage("Could not copy results automatically.")
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share({
+          title: header,
+          text,
+          url: shareUrl,
+        })
+        setMessage("Results shared.")
+        return
+      }
+
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+        setMessage("Results copied to clipboard.")
+        return
+      }
+
+      setMessage("Sharing is not available on this device.")
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return
+      }
+
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+          setMessage("Results copied to clipboard.")
+          return
+        }
+      } catch {
+        // ignore clipboard fallback errors
+      }
+
+      setMessage("Could not share results automatically.")
     }
   }
 
@@ -4797,7 +4857,7 @@ export default function Home() {
               <div>
                 <h2 style={{ margin: 0, fontSize: "22px" }}>Settings</h2>
                 <div style={{ fontSize: "13px", color: "#6d5537", marginTop: "4px" }}>
-                  Tune sound, haptics, and motion.
+                  Tune appearance, sound, haptics, and motion.
                 </div>
               </div>
               <button
@@ -4820,6 +4880,12 @@ export default function Home() {
             </div>
 
             {[
+              {
+                label: "Night mode",
+                description: "Use the softer low-light palette even if Safari is in light mode.",
+                checked: nightModeEnabled,
+                onChange: () => setNightModeEnabled((prev) => !prev),
+              },
               {
                 label: "Sound effects",
                 description: "Play tones for tile placement, actions, and wins.",
