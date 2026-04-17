@@ -270,9 +270,22 @@ type HardSlot = {
   word: string
 }
 
+type EasySlot = {
+  direction: "across" | "down"
+  row: number
+  col: number
+  word: string
+}
+
 const HARD_BOARD_SIZE = 11
+const EASY_BOARD_SIZE = 7
+const FUTURE_EASY_REBUILD_START = "2026-04-18"
 
 type HardTransform = {
+  transpose?: boolean
+}
+
+type EasyTransform = {
   transpose?: boolean
 }
 
@@ -308,6 +321,74 @@ const hardModeTransforms: HardTransform[] = [
   { transpose: true },
 ]
 
+const easyModeBlueprints: EasySlot[][] = [
+  [
+    { direction: "across", row: 3, col: 1, word: "PLANE" },
+    { direction: "down", row: 1, col: 2, word: "AXLE" },
+    { direction: "down", row: 2, col: 4, word: "ANT" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "CLOUD" },
+    { direction: "down", row: 1, col: 2, word: "ISLE" },
+    { direction: "down", row: 2, col: 4, word: "MUG" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "MARKET" },
+    { direction: "down", row: 1, col: 1, word: "BEAM" },
+    { direction: "down", row: 2, col: 4, word: "GEM" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "SPRING" },
+    { direction: "down", row: 2, col: 2, word: "ARC" },
+    { direction: "down", row: 2, col: 4, word: "ONE" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "BUTTON" },
+    { direction: "down", row: 2, col: 3, word: "ATE" },
+    { direction: "down", row: 2, col: 5, word: "SOD" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "FABLE" },
+    { direction: "down", row: 2, col: 2, word: "MAP" },
+    { direction: "down", row: 2, col: 4, word: "ELM" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "HARVEST" },
+    { direction: "down", row: 1, col: 1, word: "BEACH" },
+    { direction: "down", row: 1, col: 5, word: "MIST" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "BALANCE" },
+    { direction: "down", row: 1, col: 1, word: "BEACH" },
+    { direction: "down", row: 2, col: 4, word: "INK" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "SMILE" },
+    { direction: "down", row: 1, col: 1, word: "MUSIC" },
+    { direction: "down", row: 2, col: 4, word: "ELM" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "GLOVE" },
+    { direction: "down", row: 1, col: 3, word: "BROOK" },
+    { direction: "down", row: 2, col: 5, word: "HEN" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "BRICK" },
+    { direction: "down", row: 1, col: 2, word: "THREE" },
+    { direction: "down", row: 2, col: 4, word: "ACE" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "WATER" },
+    { direction: "down", row: 1, col: 3, word: "METAL" },
+    { direction: "down", row: 2, col: 5, word: "ART" },
+  ],
+]
+
+const easyModeTransforms: EasyTransform[] = [
+  {},
+  { transpose: true },
+]
+
 function transposeHardSlot(slot: HardSlot): HardSlot {
   return {
     ...slot,
@@ -322,6 +403,25 @@ function transformHardSlot(slot: HardSlot, transform: HardTransform) {
 
   if (transform.transpose) {
     transformed = transposeHardSlot(transformed)
+  }
+
+  return transformed
+}
+
+function transposeEasySlot(slot: EasySlot): EasySlot {
+  return {
+    ...slot,
+    direction: slot.direction === "across" ? "down" : "across",
+    row: slot.col,
+    col: slot.row,
+  }
+}
+
+function transformEasySlot(slot: EasySlot, transform: EasyTransform) {
+  let transformed = { ...slot }
+
+  if (transform.transpose) {
+    transformed = transposeEasySlot(transformed)
   }
 
   return transformed
@@ -349,6 +449,28 @@ function buildHardLayout(slots: HardSlot[], transform: HardTransform = {}) {
   return Array.from(cells.values())
 }
 
+function buildEasyLayout(slots: EasySlot[], transform: EasyTransform = {}) {
+  const cells = new Map<string, PuzzleCell>()
+
+  for (const slot of slots.map((item) => transformEasySlot(item, transform))) {
+    for (let index = 0; index < slot.word.length; index++) {
+      const row = slot.direction === "across" ? slot.row : slot.row + index
+      const col = slot.direction === "across" ? slot.col + index : slot.col
+      const key = `${row},${col}`
+      const letter = slot.word[index]
+      const existing = cells.get(key)
+
+      if (existing && existing.letter !== letter) {
+        throw new Error(`Easy layout conflict at ${key}.`)
+      }
+
+      cells.set(key, { row, col, letter })
+    }
+  }
+
+  return Array.from(cells.values())
+}
+
 function getHardModeLayoutForDate(date: string) {
   const random = createSeededRandom(`hard-${date}`)
   const slotLayout = hardModeBlueprints[Math.floor(random() * hardModeBlueprints.length)]
@@ -358,6 +480,27 @@ function getHardModeLayoutForDate(date: string) {
   for (const cell of transformedLayout) {
     if (cell.row < 0 || cell.row >= HARD_BOARD_SIZE || cell.col < 0 || cell.col >= HARD_BOARD_SIZE) {
       throw new Error(`Generated hard puzzle for ${date} produced out-of-bounds cell.`)
+    }
+  }
+
+  return transformedLayout
+}
+
+function getGeneratedEasyLayoutForDate(date: string) {
+  const start = Date.parse(`${FUTURE_EASY_REBUILD_START}T00:00:00Z`)
+  const current = Date.parse(`${date}T00:00:00Z`)
+  const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
+  const comboCount = easyModeBlueprints.length * easyModeTransforms.length
+  const comboIndex = dayOffset % comboCount
+  const blueprintIndex = Math.floor(comboIndex / easyModeTransforms.length)
+  const transformIndex = comboIndex % easyModeTransforms.length
+  const slotLayout = easyModeBlueprints[blueprintIndex]
+  const transform = easyModeTransforms[transformIndex]
+  const transformedLayout = buildEasyLayout(slotLayout, transform)
+
+  for (const cell of transformedLayout) {
+    if (cell.row < 0 || cell.row >= EASY_BOARD_SIZE || cell.col < 0 || cell.col >= EASY_BOARD_SIZE) {
+      throw new Error(`Generated easy puzzle for ${date} produced out-of-bounds cell.`)
     }
   }
 
@@ -386,6 +529,25 @@ function validateHardBlueprints() {
           optimalWords: [],
         },
         hardPuzzleValidationOptions
+      )
+    }
+  }
+}
+
+function validateEasyBlueprints() {
+  for (const [blueprintIndex, blueprint] of easyModeBlueprints.entries()) {
+    for (const [transformIndex, transform] of easyModeTransforms.entries()) {
+      validatePuzzleLayout(
+        {
+          id: `easy-blueprint-${blueprintIndex + 1}-transform-${transformIndex + 1}`,
+          date: "0000-00-00",
+          boardSize: EASY_BOARD_SIZE,
+          rack: [],
+          filledCells: buildEasyLayout(blueprint, transform),
+          bonusCells: defaultBonusCells,
+          optimalScore: 0,
+          optimalWords: [],
+        }
       )
     }
   }
@@ -1041,6 +1203,13 @@ const baseDailyPuzzles: DailyPuzzle[] = [
 ]
 
 export const DAILY_PUZZLES: DailyPuzzle[] = baseDailyPuzzles.map((puzzle, index) => {
+  if (puzzle.date >= FUTURE_EASY_REBUILD_START) {
+    return {
+      ...puzzle,
+      filledCells: getGeneratedEasyLayoutForDate(puzzle.date),
+    }
+  }
+
   if (puzzle.date >= "2026-04-08" && puzzle.date <= "2026-04-20") {
     return puzzle
   }
@@ -1060,6 +1229,7 @@ for (const puzzle of DAILY_PUZZLES) {
   validatePuzzleLayout(puzzle)
 }
 
+validateEasyBlueprints()
 validateHardBlueprints()
 
 export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {

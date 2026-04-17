@@ -125,6 +125,7 @@ const SOUND_MUTED_KEY = "daily-word-game-sound-muted"
 const HAPTICS_ENABLED_KEY = "daily-word-game-haptics-enabled"
 const REDUCED_MOTION_KEY = "daily-word-game-reduced-motion"
 const NIGHT_MODE_KEY = "daily-word-game-night-mode"
+const FUTURE_PUZZLE_TEST_MODE_KEY = "daily-word-game-future-puzzle-test-mode"
 const HOME_BRAND_TILES = ["L", "E", "X", "I", "C", "O", "N"]
 
 function shuffleArray(items: RackSlot[]) {
@@ -415,6 +416,7 @@ export default function Home() {
   const [hapticsEnabled, setHapticsEnabled] = useState(true)
   const [reducedMotionEnabled, setReducedMotionEnabled] = useState(false)
   const [nightModeEnabled, setNightModeEnabled] = useState(false)
+  const [futurePuzzleTestMode, setFuturePuzzleTestMode] = useState(false)
   const [hasSavedTodayGame, setHasSavedTodayGame] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
@@ -683,6 +685,12 @@ export default function Home() {
     }
 
     try {
+      setFuturePuzzleTestMode(localStorage.getItem(FUTURE_PUZZLE_TEST_MODE_KEY) === "1")
+    } catch {
+      // ignore
+    }
+
+    try {
       setHasSavedTodayGame(Boolean(localStorage.getItem(`daily-word-game-${todayDate}`)))
     } catch {
       // ignore
@@ -724,6 +732,14 @@ export default function Home() {
 
     document.documentElement.dataset.theme = nightModeEnabled ? "night" : "day"
   }, [nightModeEnabled])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FUTURE_PUZZLE_TEST_MODE_KEY, futurePuzzleTestMode ? "1" : "0")
+    } catch {
+      // ignore
+    }
+  }, [futurePuzzleTestMode])
 
   useEffect(() => {
     try {
@@ -1242,6 +1258,38 @@ export default function Home() {
     return allSameRow ? "row" : "col"
   }
 
+  function isMoveContinuous(direction: "row" | "col") {
+    if (placedTiles.length <= 1) return true
+
+    if (direction === "row") {
+      const row = placedTiles[0].row
+      const cols = placedTiles.map((tile) => tile.col)
+      const minCol = Math.min(...cols)
+      const maxCol = Math.max(...cols)
+
+      for (let col = minCol; col <= maxCol; col++) {
+        if (!getCellLetter(row, col)) {
+          return false
+        }
+      }
+
+      return true
+    }
+
+    const col = placedTiles[0].col
+    const rows = placedTiles.map((tile) => tile.row)
+    const minRow = Math.min(...rows)
+    const maxRow = Math.max(...rows)
+
+    for (let row = minRow; row <= maxRow; row++) {
+      if (!getCellLetter(row, col)) {
+        return false
+      }
+    }
+
+    return true
+  }
+
   function buildWordAt(row: number, col: number, direction: "row" | "col") {
     let startRow = row
     let endRow = row
@@ -1399,6 +1447,7 @@ export default function Home() {
 
     const mainDirection = getMoveDirection()
     if (!mainDirection) return []
+    if (!isMoveContinuous(mainDirection)) return []
 
     const mainWord = buildWordAt(placedTiles[0].row, placedTiles[0].col, mainDirection)
     const mainCells = getWordCells(placedTiles[0].row, placedTiles[0].col, mainDirection)
@@ -1455,6 +1504,12 @@ export default function Home() {
     }
 
     const wordsFormed = getAllWordPreviews()
+    const moveDirection = getMoveDirection()
+
+    if (moveDirection && !isMoveContinuous(moveDirection)) {
+      setMessage("Your tiles must make one continuous line.")
+      return
+    }
 
     if (wordsFormed.length === 0) {
       setMessage("Your tiles must form a real word.")
@@ -2350,7 +2405,9 @@ export default function Home() {
       {statsContent}
     </div>
   )
-  const archivePuzzles = DAILY_PUZZLES.filter((p) => p.date <= todayDate)
+  const archivePuzzles = DAILY_PUZZLES.filter((p) =>
+    futurePuzzleTestMode ? true : p.date <= todayDate
+  )
   const archiveMonthKeys = Array.from(new Set(archivePuzzles.map((p) => getMonthKey(p.date)))).sort()
   const activeArchiveMonthKey =
     archiveMonthKeys.includes(archiveMonthKey)
@@ -2436,18 +2493,47 @@ export default function Home() {
         </div>
         <div
           style={{
-            padding: isCompactMobile ? "8px 10px" : "9px 12px",
-            borderRadius: "999px",
-            background: "rgba(255,250,240,0.9)",
-            border: "1px solid rgba(123, 98, 65, 0.14)",
-            color: "#2f2419",
-            fontWeight: 800,
-            flexShrink: 0,
-            fontSize: isCompactMobile ? "12px" : "13px",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)",
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "8px",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
           }}
         >
-          {archiveCompletedCountThisMonth}/{archivePuzzleCountThisMonth} done
+          <button
+            onClick={() => setFuturePuzzleTestMode((prev) => !prev)}
+            style={{
+              padding: isCompactMobile ? "8px 10px" : "9px 12px",
+              borderRadius: "999px",
+              background: futurePuzzleTestMode ? "#2f2419" : "rgba(255,250,240,0.9)",
+              border: futurePuzzleTestMode
+                ? "1px solid rgba(47,36,25,0.8)"
+                : "1px solid rgba(123, 98, 65, 0.14)",
+              color: futurePuzzleTestMode ? "#fffaf1" : "#2f2419",
+              fontWeight: 800,
+              flexShrink: 0,
+              fontSize: isCompactMobile ? "12px" : "13px",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+              cursor: "pointer",
+            }}
+          >
+            {futurePuzzleTestMode ? "Test Future On" : "Test Future Off"}
+          </button>
+          <div
+            style={{
+              padding: isCompactMobile ? "8px 10px" : "9px 12px",
+              borderRadius: "999px",
+              background: "rgba(255,250,240,0.9)",
+              border: "1px solid rgba(123, 98, 65, 0.14)",
+              color: "#2f2419",
+              fontWeight: 800,
+              flexShrink: 0,
+              fontSize: isCompactMobile ? "12px" : "13px",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)",
+            }}
+          >
+            {archiveCompletedCountThisMonth}/{archivePuzzleCountThisMonth} done
+          </div>
         </div>
       </div>
       <div
@@ -2632,6 +2718,7 @@ export default function Home() {
             }
 
             const isToday = cell.date === todayDate
+            const isFuture = cell.date > todayDate
             const isSelected = cell.date === selectedDate
             const completionStatus = completedArchiveDates[cell.date] ?? {
               easy: false,
@@ -2675,8 +2762,10 @@ export default function Home() {
                     ? "2px solid #5f4221"
                     : isToday
                       ? "2px solid #b98f58"
+                      : isFuture
+                        ? "1px dashed rgba(95, 66, 33, 0.4)"
                       : "1px solid rgba(123, 98, 65, 0.18)",
-                  backgroundColor: isCompleted ? "#7aad2a" : "#efe2c7",
+                  backgroundColor: isCompleted ? "#7aad2a" : isFuture ? "#f5ead6" : "#efe2c7",
                   color: isCompleted ? "#fffaf1" : "#2f2419",
                   cursor: "pointer",
                   fontWeight: 800,
@@ -2687,6 +2776,8 @@ export default function Home() {
                     ? "0 8px 16px rgba(114, 173, 45, 0.18)"
                     : isToday
                       ? "0 6px 14px rgba(185, 143, 88, 0.16)"
+                      : isFuture
+                        ? "0 4px 10px rgba(95, 66, 33, 0.08)"
                       : "none",
                   position: "relative",
                   transition: reducedMotionEnabled ? undefined : "transform 140ms ease, box-shadow 140ms ease",
@@ -2718,6 +2809,24 @@ export default function Home() {
                 >
                   {Number(cell.date.slice(-2))}
                 </span>
+                {isFuture && !isCompleted && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      bottom: "4px",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      fontSize: "8px",
+                      fontWeight: 800,
+                      letterSpacing: "0.08em",
+                      color: "#8a6a42",
+                      zIndex: 1,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Test
+                  </span>
+                )}
                 {isToday && (
                   <span
                     style={{
