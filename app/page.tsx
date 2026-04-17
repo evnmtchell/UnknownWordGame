@@ -317,10 +317,12 @@ export default function Home() {
   const returnPlacedTileToRackRef = useRef<((tile: DraggedPlacedTile) => void) | null>(null)
 
   const [puzzleOptimal, setPuzzleOptimal] = useState<{ score: number; words: string[] } | null>(null)
-  const puzzle = useMemo(
-    () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode),
-    [loadedGameConfig]
-  )
+  const puzzle = useMemo(() => {
+    const t = performance.now()
+    const p = getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode)
+    console.log(`[lexicon] getPuzzleByDate(${loadedGameConfig.date}, ${loadedGameConfig.mode}): ${(performance.now() - t).toFixed(0)}ms`)
+    return p
+  }, [loadedGameConfig])
   type SolutionType = { bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] }
   const fullSolutionRef = useRef<SolutionType | null>(null)
 
@@ -1751,6 +1753,7 @@ export default function Home() {
   }
 
   function selectPuzzleDate(date: string, mode: "easy" | "hard" = selectedMode) {
+    console.time("[lexicon] selectPuzzleDate")
     const newPuzzle = getPuzzleByDate(date, mode)
     setPuzzleOptimal(null)
     fullSolutionRef.current = null
@@ -1830,6 +1833,7 @@ export default function Home() {
       }
       setHasLoadedSave(true)
     })
+    console.timeEnd("[lexicon] selectPuzzleDate")
   }
 
   function goHome() {
