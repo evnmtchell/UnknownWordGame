@@ -1428,6 +1428,14 @@ export default function Home() {
 
     // Save to DB directly on submit
     const updatedHistory = [...attemptHistory, newAttempt]
+    const sessionRating = newAttemptsLeft === 0
+      ? (solution.bestScore <= 0 ? "Keep trying"
+        : newBestScore / solution.bestScore >= 1 ? "Perfect"
+        : newBestScore / solution.bestScore >= 0.9 ? "Excellent"
+        : newBestScore / solution.bestScore >= 0.75 ? "Great"
+        : newBestScore / solution.bestScore >= 0.5 ? "Solid"
+        : "Keep trying")
+      : null
     saveSession({
       date: puzzle.date,
       mode: loadedGameConfig.mode,
@@ -1437,7 +1445,7 @@ export default function Home() {
       hint_used: hintLevel > 0,
       hint_level: hintLevel,
       completed: newAttemptsLeft === 0,
-      rating: null,
+      rating: sessionRating,
       submitted_words: wordResults,
       submitted_score: totalScore,
       message: "",
