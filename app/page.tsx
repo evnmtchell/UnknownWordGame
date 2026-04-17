@@ -1661,16 +1661,67 @@ export default function Home() {
     setSelectedTile(null)
     setDraggedTile(null)
     setDraggedPlacedTile(null)
-    setSubmittedWords([])
-    setSubmittedScore(0)
-    setAttemptsLeft(maxAttempts)
-    setBestScore(0)
-    setAttemptHistory([])
     setRackDropIndex(null)
-    setHintLevel(0)
-    setShowHint(false)
     setShowMoreActions(false)
     setShowPuzzleReview(false)
+    setHintLevel(0)
+    setShowHint(false)
+    setHasLoadedSave(false)
+    initialLoadDone.current = false
+    statsUpdatedRef.current = false
+
+    // Load saved state from API, fall back to localStorage
+    const key = `daily-word-game-${date}-${mode}`
+    loadSession(date, mode).then((apiSession) => {
+      if (apiSession && Array.isArray(apiSession.attempt_history) && apiSession.attempt_history.length > 0) {
+        setAttemptsLeft(apiSession.attempts_left)
+        setBestScore(apiSession.best_score)
+        setAttemptHistory(apiSession.attempt_history as AttemptResult[])
+        const lastAttempt = apiSession.attempt_history[apiSession.attempt_history.length - 1] as AttemptResult
+        setSubmittedWords(lastAttempt.words)
+        setSubmittedScore(lastAttempt.totalScore)
+        if (apiSession.hint_level > 0) { setHintLevel(apiSession.hint_level); setShowHint(false) }
+        if (apiSession.attempts_left === 0) statsUpdatedRef.current = true
+        setMessage(`Restored from your account. Best score: ${apiSession.best_score}.`)
+      } else {
+        const saved = localStorage.getItem(key)
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved) as Partial<SavedGameState>
+            if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
+            if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
+            if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
+            if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
+            if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
+            if (parsed.message) setMessage(parsed.message)
+            if (parsed.attemptsLeft === 0) statsUpdatedRef.current = true
+          } catch { /* ignore */ }
+        } else {
+          setSubmittedWords([])
+          setSubmittedScore(0)
+          setAttemptsLeft(maxAttempts)
+          setBestScore(0)
+          setAttemptHistory([])
+          setMessage("Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
+        }
+      }
+      setHasLoadedSave(true)
+    }).catch(() => {
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as Partial<SavedGameState>
+          if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
+          if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
+          if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
+          if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
+          if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
+          if (parsed.message) setMessage(parsed.message)
+          if (parsed.attemptsLeft === 0) statsUpdatedRef.current = true
+        } catch { /* ignore */ }
+      }
+      setHasLoadedSave(true)
+    })
     setShowArchive(false)
     statsUpdatedRef.current = false
     setMessage("Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
