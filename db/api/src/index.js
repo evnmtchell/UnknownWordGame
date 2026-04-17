@@ -38,6 +38,8 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true)
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    // Allow Apple/Google OAuth callbacks
+    if (origin === "https://appleid.apple.com") return callback(null, true)
     callback(new Error("Not allowed by CORS"))
   },
   credentials: true,
