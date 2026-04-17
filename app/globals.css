@@ -7,6 +7,27 @@
   --board-shell-mid: #88aebf;
   --board-shell-end: #6f97aa;
   --board-shell-shadow: rgba(53, 82, 99, 0.18);
+  color-scheme: light;
+}
+
+:root[data-theme="day"] {
+  --background: #f7efe1;
+  --foreground: #2f2419;
+  --board-shell-start: #a7c5d8;
+  --board-shell-mid: #88aebf;
+  --board-shell-end: #6f97aa;
+  --board-shell-shadow: rgba(53, 82, 99, 0.18);
+  color-scheme: light;
+}
+
+:root[data-theme="night"] {
+  --background: #e8ded0;
+  --foreground: #2f2419;
+  --board-shell-start: #95b3c6;
+  --board-shell-mid: #7f9fb1;
+  --board-shell-end: #69889b;
+  --board-shell-shadow: rgba(24, 34, 43, 0.26);
+  color-scheme: light;
 }
 
 @theme inline {
@@ -24,18 +45,28 @@ html {
   background: linear-gradient(180deg, #fbf5ea 0%, #f4e7d2 100%);
 }
 
+html[data-theme="day"] {
+  background: linear-gradient(180deg, #fbf5ea 0%, #f4e7d2 100%);
+}
+
+html[data-theme="night"] {
+  background: linear-gradient(180deg, #e4dbcf 0%, #d7cec3 100%);
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #191714;
-    --foreground: #f4ede1;
-    --board-shell-start: #2f4352;
-    --board-shell-mid: #253847;
-    --board-shell-end: #1d2d3b;
-    --board-shell-shadow: rgba(8, 12, 18, 0.38);
+  :root:not([data-theme]) {
+    /* Keep a softer night palette so the app's warm inline text stays readable. */
+    --background: #e8ded0;
+    --foreground: #2f2419;
+    --board-shell-start: #95b3c6;
+    --board-shell-mid: #7f9fb1;
+    --board-shell-end: #69889b;
+    --board-shell-shadow: rgba(24, 34, 43, 0.26);
+    color-scheme: light;
   }
 
-  html {
-    background: linear-gradient(180deg, #1f1b17 0%, #151310 100%);
+  html:not([data-theme]) {
+    background: linear-gradient(180deg, #e4dbcf 0%, #d7cec3 100%);
   }
 }
 
