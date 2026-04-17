@@ -2180,7 +2180,6 @@ export default function Home() {
         await navigator.share({
           title: header,
           text,
-          url: shareUrl,
         })
         setMessage("Results shared.")
         return
