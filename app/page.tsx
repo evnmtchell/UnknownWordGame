@@ -516,7 +516,9 @@ export default function Home() {
     }
 
     // Try loading from API first, fall back to localStorage
+    console.log("[lexicon] Loading session for", puzzle.date, loadedGameConfig.mode)
     loadSession(puzzle.date, loadedGameConfig.mode).then((apiSession) => {
+      console.log("[lexicon] API session result:", apiSession)
       if (apiSession && apiSession.attempt_history && (apiSession.attempt_history as unknown[]).length > 0) {
         applySessionData({
           attemptsLeft: apiSession.attempts_left,
