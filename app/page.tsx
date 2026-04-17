@@ -18,6 +18,7 @@ type DraggedPlacedTile = {
   col: number
   letter: string
   isBlank: boolean
+  rackIndex: number
 } | null
 
 type TouchDragState = {
@@ -33,6 +34,7 @@ type TouchDragState = {
   row: number
   col: number
   isBlank: boolean
+  rackIndex: number
   x: number
   y: number
 } | null
@@ -42,6 +44,7 @@ type PlacedTile = {
   col: number
   letter: string
   isBlank: boolean
+  rackIndex: number
 }
 
 type WordResult = {
@@ -137,6 +140,35 @@ function moveItemToIndex<T>(items: T[], fromIndex: number, toIndex: number) {
   const [moved] = copy.splice(fromIndex, 1)
   copy.splice(toIndex, 0, moved)
   return copy
+}
+
+function restoreRackSlotsFromPlacedTiles(
+  rackSlots: RackSlot[],
+  tiles: Array<Pick<PlacedTile, "letter" | "isBlank" | "rackIndex">>
+) {
+  const nextRack = [...rackSlots]
+
+  for (const tile of [...tiles].sort((a, b) => a.rackIndex - b.rackIndex)) {
+    const tileValue = tile.isBlank ? BLANK_TILE : tile.letter
+
+    if (
+      tile.rackIndex >= 0 &&
+      tile.rackIndex < nextRack.length &&
+      nextRack[tile.rackIndex] === null
+    ) {
+      nextRack[tile.rackIndex] = tileValue
+      continue
+    }
+
+    const fallbackIndex = nextRack.findIndex((slot) => slot === null)
+    if (fallbackIndex !== -1) {
+      nextRack[fallbackIndex] = tileValue
+    } else {
+      nextRack.push(tileValue)
+    }
+  }
+
+  return nextRack
 }
 
 function getBoardCellKey(row: number, col: number) {
@@ -263,9 +295,8 @@ export default function Home() {
   const [countdownMs, setCountdownMs] = useState(() => getTimeUntilNextLocalDay(new Date()))
   const resetCountdown = useMemo(() => formatCountdown(countdownMs), [countdownMs])
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
-  const [showArchive, setShowArchive] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
-  const [viewMode, setViewMode] = useState<"home" | "daily" | "game">("home")
+  const [viewMode, setViewMode] = useState<"home" | "daily" | "archive" | "game">("home")
   const [archiveMonthKey, setArchiveMonthKey] = useState(() => getMonthKey(todayDate))
   const [completedArchiveDates, setCompletedArchiveDates] = useState<
     Record<string, ArchiveCompletionStatus>
@@ -300,14 +331,29 @@ export default function Home() {
   const activeGameMode = loadedGameConfig.mode
   const storageKey = `daily-word-game-${puzzle.date}-${loadedGameConfig.mode}`
   const boardGap = isCompactMobile ? 3 : 4
-  const boardCellSize = isCompactMobile ? 46 : 54
+  const compactBoardShellPadding = isCompactMobile ? 6 : 14
   const compactRackGapWidth = 2
+  const compactBoardAvailableWidth =
+    isCompactMobile && viewportSize.width > 0
+      ? Math.max(240, viewportSize.width - 16 - compactBoardShellPadding * 2)
+      : 0
+  const compactBoardCellSize =
+    isCompactMobile && compactBoardAvailableWidth > 0
+      ? Math.max(
+          activeGameMode === "hard" ? 29 : 34,
+          Math.min(
+            activeGameMode === "hard" ? 40 : 46,
+            Math.floor((compactBoardAvailableWidth - (boardSize - 1) * boardGap) / boardSize)
+          )
+        )
+      : 46
+  const boardCellSize = isCompactMobile ? compactBoardCellSize : 54
   const compactRackTileSize =
     isCompactMobile && viewportSize.width > 0
       ? Math.max(
-          34,
+          32,
           Math.min(
-            46,
+            42,
             Math.floor(
               (viewportSize.width - 32 - (startingRack.length + 1) * compactRackGapWidth) /
                 startingRack.length
@@ -316,12 +362,12 @@ export default function Home() {
         )
       : 46
   const rackTileSize = isCompactMobile ? compactRackTileSize : 56
-  const actionButtonMinHeight = isCompactMobile ? 46 : 54
+  const actionButtonMinHeight = isCompactMobile ? 42 : 54
   const boardMaxWidth = `${boardSize * boardCellSize + (boardSize - 1) * boardGap}px`
   const compactViewportWidth = Math.max(0, viewportSize.width - 16)
   const compactViewportHeightBudget = Math.max(
     0,
-    viewportSize.height - (activeGameMode === "hard" ? 318 : 286)
+    viewportSize.height - (activeGameMode === "hard" ? 266 : 238)
   )
   const compactPuzzleFrameWidth =
     isCompactMobile && compactViewportWidth > 0
@@ -1016,7 +1062,7 @@ export default function Home() {
 
     setPlacedTiles((prev) => [
       ...prev,
-      { row, col, letter: resolvedLetter, isBlank: tileData.isBlank },
+      { row, col, letter: resolvedLetter, isBlank: tileData.isBlank, rackIndex: tileData.index },
     ])
     setRecentPlacementKey(`${row}-${col}`)
     setRack((prev) => prev.map((tile, index) => (index === tileData.index ? null : tile)))
@@ -1057,7 +1103,7 @@ export default function Home() {
 
     setPlacedTiles([
       ...remainingTiles,
-      { row, col, letter: tile.letter, isBlank: tile.isBlank },
+      { row, col, letter: tile.letter, isBlank: tile.isBlank, rackIndex: tile.rackIndex },
     ])
     draggedPlacedTileRef.current = null
     setDraggedPlacedTile(null)
@@ -1101,14 +1147,15 @@ export default function Home() {
     row: number,
     col: number,
     letter: string,
-    isBlank: boolean
+    isBlank: boolean,
+    rackIndex: number
   ) {
     if (attemptsLeft === 0) return
     e.dataTransfer.setData("text/plain", `${letter}-${row}-${col}`)
     e.dataTransfer.effectAllowed = "move"
-    setDraggedPlacedTile({ row, col, letter, isBlank })
+    setDraggedPlacedTile({ row, col, letter, isBlank, rackIndex })
     draggedTileRef.current = null
-    draggedPlacedTileRef.current = { row, col, letter, isBlank }
+    draggedPlacedTileRef.current = { row, col, letter, isBlank, rackIndex }
     setDraggedTile(null)
     setSelectedTile(null)
     setRackDropIndex(null)
@@ -1139,15 +1186,7 @@ export default function Home() {
     setPlacedTiles((prev) =>
       prev.filter((placed) => !(placed.row === tile.row && placed.col === tile.col))
     )
-    setRack((prev) => {
-      const nextRack = [...prev]
-      const emptyIndex = nextRack.findIndex((slot) => slot === null)
-      if (emptyIndex !== -1) {
-        nextRack[emptyIndex] = tile.isBlank ? BLANK_TILE : tile.letter
-        return nextRack
-      }
-      return [...nextRack, tile.isBlank ? BLANK_TILE : tile.letter]
-    })
+    setRack((prev) => restoreRackSlotsFromPlacedTiles(prev, [tile]))
     draggedPlacedTileRef.current = null
     setDraggedPlacedTile(null)
     setSelectedTile(null)
@@ -1436,10 +1475,10 @@ export default function Home() {
     triggerUiFeedback(solvedOptimally ? "win" : "submit")
     setMessage(
       solvedOptimallyOnFirstTry
-        ? `Perfect first try. You scored the optimal ${solution.bestScore}, so the game is over.`
+        ? "Perfect first try. You found the top play, so the game is over."
         : solvedOptimally
-        ? `You found the optimal ${solution.bestScore}, so the game is over.`
-        : `You scored ${totalScore}. Optimal score: ${solution.bestScore}.`
+        ? "You found the top play, so the game is over."
+        : `You scored ${totalScore}.`
     )
 
     if (newAttemptsLeft === 0) {
@@ -1467,7 +1506,7 @@ export default function Home() {
       })
     }
 
-    setRack(startingRack)
+    setRack((prev) => restoreRackSlotsFromPlacedTiles(prev, placedTiles))
     setPlacedTiles([])
     setSelectedTile(null)
     setDraggedTile(null)
@@ -1500,26 +1539,8 @@ export default function Home() {
     })
   }
 
-  function undoLastTile() {
-    if (placedTiles.length === 0) return
-    const last = placedTiles[placedTiles.length - 1]
-    setPlacedTiles((prev) => prev.slice(0, -1))
-    setRack((prev) => {
-      const nextRack = [...prev]
-      const emptyIndex = nextRack.findIndex((slot) => slot === null)
-      if (emptyIndex !== -1) {
-        nextRack[emptyIndex] = last.isBlank ? BLANK_TILE : last.letter
-        return nextRack
-      }
-      return [...nextRack, last.isBlank ? BLANK_TILE : last.letter]
-    })
-    triggerAppHapticFeedback(8)
-    triggerUiFeedback("recall")
-    setMessage(last.isBlank ? "Returned blank tile to the rack." : `Returned ${last.letter} to the rack.`)
-  }
-
   function clearCurrentMove() {
-    setRack(startingRack)
+    setRack((prev) => restoreRackSlotsFromPlacedTiles(prev, placedTiles))
     setPlacedTiles([])
     setSelectedTile(null)
     setDraggedTile(null)
@@ -1528,29 +1549,6 @@ export default function Home() {
     triggerAppHapticFeedback(8)
     triggerUiFeedback("recall")
     setMessage("Board cleared. Start a new move.")
-  }
-
-  function resetGame() {
-    setRack(startingRack)
-    setPlacedTiles([])
-    setSelectedTile(null)
-    setDraggedTile(null)
-    setDraggedPlacedTile(null)
-    setSubmittedWords([])
-    setSubmittedScore(0)
-    setAttemptsLeft(maxAttempts)
-    setBestScore(0)
-    setAttemptHistory([])
-    setRackDropIndex(null)
-    setHintLevel(0)
-    setShowHint(false)
-    setShowMoreActions(false)
-    setShowSettings(false)
-    setShowPuzzleReview(false)
-    statsUpdatedRef.current = false
-    triggerAppHapticFeedback([10, 18, 10])
-    setMessage("New game started.")
-    localStorage.removeItem(storageKey)
   }
 
   function updateStats(rating: string, analyticsRecord: PuzzleAnalyticsRecord) {
@@ -1722,15 +1720,10 @@ export default function Home() {
       }
       setHasLoadedSave(true)
     })
-    setShowArchive(false)
-    statsUpdatedRef.current = false
-    setMessage("Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
-    setHasLoadedSave(false)
   }
 
   function goHome() {
     setViewMode("home")
-    setShowArchive(false)
     setShowStats(false)
     setShowMoreActions(false)
     setShowSettings(false)
@@ -1761,15 +1754,25 @@ export default function Home() {
     row: number,
     col: number,
     letter: string,
-    isBlank: boolean
+    isBlank: boolean,
+    rackIndex: number
   ) {
     if (gameOver) return
     e.preventDefault()
     const touch = e.touches[0]
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     setTouchDragEngaged(false)
-    setTouchDrag({ type: "placed", letter, row, col, isBlank, x: touch.clientX, y: touch.clientY })
-    setDraggedPlacedTile({ row, col, letter, isBlank })
+    setTouchDrag({
+      type: "placed",
+      letter,
+      row,
+      col,
+      isBlank,
+      rackIndex,
+      x: touch.clientX,
+      y: touch.clientY,
+    })
+    setDraggedPlacedTile({ row, col, letter, isBlank, rackIndex })
     setDraggedTile(null)
   }
 
@@ -1793,6 +1796,7 @@ export default function Home() {
           col: drag.col,
           letter: drag.letter,
           isBlank: drag.isBlank,
+          rackIndex: drag.rackIndex,
         })
       }
       return
@@ -1816,6 +1820,7 @@ export default function Home() {
         col: drag.col,
         letter: drag.letter,
         isBlank: drag.isBlank,
+        rackIndex: drag.rackIndex,
       })
     } else if (drag.type === "rack" && rackGapEl) {
       reorderRackTileRef.current?.(drag.index, parseInt(rackGapEl.dataset.rackGap!, 10))
@@ -1834,9 +1839,21 @@ export default function Home() {
         )
       } else {
         setDraggedTile(null)
-        setDraggedPlacedTile({ row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank })
+        setDraggedPlacedTile({
+          row: drag.row,
+          col: drag.col,
+          letter: drag.letter,
+          isBlank: drag.isBlank,
+          rackIndex: drag.rackIndex,
+        })
         movePlacedTileOnBoardRef.current?.(
-          { row: drag.row, col: drag.col, letter: drag.letter, isBlank: drag.isBlank },
+          {
+            row: drag.row,
+            col: drag.col,
+            letter: drag.letter,
+            isBlank: drag.isBlank,
+            rackIndex: drag.rackIndex,
+          },
           row,
           col
         )
@@ -1849,6 +1866,7 @@ export default function Home() {
         col: drag.col,
         letter: drag.letter,
         isBlank: drag.isBlank,
+        rackIndex: drag.rackIndex,
       })
     } else {
       setDraggedTile(null)
@@ -1920,9 +1938,7 @@ export default function Home() {
 
   const gameOver = attemptsLeft === 0
   const canShare = attemptHistory.length > 0
-  const turnNumber = Math.min(attemptHistory.length + 1, maxAttempts)
-  const completedTurns = Math.min(attemptHistory.length, maxAttempts)
-  const turnProgressDegrees = `${(completedTurns / maxAttempts) * 360}deg`
+  const currentTurnIndex = Math.min(attemptHistory.length, maxAttempts - 1)
 
   useEffect(() => {
     if (gameOver) {
@@ -2012,6 +2028,7 @@ export default function Home() {
         col: nextHintTile.col,
         letter: nextHintTile.letter,
         isBlank: useBlank,
+        rackIndex,
       },
     ])
     setRack((prev) => prev.map((tile, index) => (index === rackIndex ? null : tile)))
@@ -2153,19 +2170,8 @@ export default function Home() {
           record.scorePercent < lowest.scorePercent ? record : lowest
         )
       : null
-  const statsPanel = showStats && (
-    <div
-      style={{
-        width: "100%",
-        background: homeActionButtonStyle.background,
-        border: homeActionButtonStyle.border,
-        borderRadius: homeActionButtonStyle.borderRadius,
-        padding: isCompactMobile ? "14px 16px" : "16px 18px",
-        marginBottom: "16px",
-        boxShadow: homeActionButtonStyle.boxShadow,
-        animation: reducedMotionEnabled ? undefined : "fade-up 220ms ease both",
-      }}
-    >
+  const statsContent = (
+    <>
       <strong style={{ fontSize: "18px" }}>Your Stats</strong>
       <div style={{ display: "flex", gap: "24px", marginTop: "12px", flexWrap: "wrap" }}>
         {[
@@ -2230,7 +2236,7 @@ export default function Home() {
                 {formatDisplayDate(toughestPuzzle.date)} · {toughestPuzzle.mode}
               </div>
               <div style={{ fontSize: "13px", color: "#5b4630", marginTop: "4px" }}>
-                Best score {toughestPuzzle.bestScore}/{toughestPuzzle.optimalScore} ({Math.round(toughestPuzzle.scorePercent * 100)}%)
+                Best score {toughestPuzzle.bestScore} · {Math.round(toughestPuzzle.scorePercent * 100)}% of top play
               </div>
             </div>
           )}
@@ -2265,6 +2271,23 @@ export default function Home() {
           )}
         </div>
       )}
+    </>
+  )
+  const showInGameStatsSheet = showStats && viewMode === "game"
+  const inlineStatsPanel = showStats && viewMode !== "game" && (
+    <div
+      style={{
+        width: "100%",
+        background: homeActionButtonStyle.background,
+        border: homeActionButtonStyle.border,
+        borderRadius: homeActionButtonStyle.borderRadius,
+        padding: isCompactMobile ? "14px 16px" : "16px 18px",
+        marginBottom: "16px",
+        boxShadow: homeActionButtonStyle.boxShadow,
+        animation: reducedMotionEnabled ? undefined : "fade-up 220ms ease both",
+      }}
+    >
+      {statsContent}
     </div>
   )
   const archivePuzzles = DAILY_PUZZLES.filter((p) => p.date <= todayDate)
@@ -2314,7 +2337,7 @@ export default function Home() {
     archiveCalendarCells.push({ date: null, puzzleDate: null })
   }
 
-  const archivePanel = showArchive && (
+  const archivePanel = (
     <div
       style={{
         width: "100%",
@@ -2704,34 +2727,53 @@ export default function Home() {
                   "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
                 border: "1px solid rgba(123, 98, 65, 0.14)",
                 boxShadow: "0 18px 36px rgba(78, 56, 28, 0.08)",
-                position: "relative",
               }}
             >
               <div
                 style={{
-                  position: "absolute",
-                  top: isCompactMobile ? "18px" : "24px",
-                  right: isCompactMobile ? "18px" : "24px",
-                  fontSize: isCompactMobile ? "12px" : "13px",
-                  color: "#8a6a42",
-                  fontWeight: 700,
-                  letterSpacing: "0.03em",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                  marginBottom: isCompactMobile ? "8px" : "10px",
                 }}
               >
-                {todayDisplayDate}
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: isCompactMobile ? "11px" : "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.18em",
+                    color: "#8a6a42",
+                    fontWeight: 800,
+                  }}
+                >
+                  Daily Puzzle
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    gap: isCompactMobile ? "8px" : "10px",
+                    flexWrap: "wrap",
+                    marginLeft: "auto",
+                    fontSize: isCompactMobile ? "12px" : "13px",
+                    color: "#8a6a42",
+                    fontWeight: 700,
+                  }}
+                >
+                  <span style={{ letterSpacing: "0.03em" }}>{todayDisplayDate}</span>
+                  <span style={{ opacity: 0.45 }}>•</span>
+                  <span style={{ opacity: 0.72, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    Next
+                  </span>
+                  <span style={{ color: "#2f2419", fontWeight: 800 }}>
+                    {hasMounted ? resetCountdown : "--:--:--"}
+                  </span>
+                </div>
               </div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: isCompactMobile ? "11px" : "12px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.18em",
-                  color: "#8a6a42",
-                  fontWeight: 800,
-                }}
-              >
-                Daily Puzzle
-              </p>
               <div
                 aria-label="Lexicon"
                 style={{
@@ -2740,7 +2782,7 @@ export default function Home() {
                   alignItems: "center",
                   justifyContent: "center",
                   gap: isCompactMobile ? "2px" : "4px",
-                  margin: isCompactMobile ? "8px 0 10px" : "10px 0 12px",
+                  margin: isCompactMobile ? "0 0 10px" : "0 0 12px",
                   overflowX: "auto",
                   paddingBottom: "4px",
                 }}
@@ -2825,27 +2867,19 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <p style={{ margin: 0, fontSize: isCompactMobile ? "15px" : "17px", color: "#5b4630", maxWidth: "40ch", lineHeight: 1.45 }}>
-                A lexicon is the vocabulary of a language, speaker, or subject.
-              </p>
-              <div
+              <p
                 style={{
-                  marginTop: "12px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: isCompactMobile ? "8px 12px" : "9px 14px",
-                  borderRadius: "999px",
-                  background: "rgba(255,250,240,0.92)",
-                  border: "1px solid rgba(123, 98, 65, 0.14)",
-                  fontSize: isCompactMobile ? "12px" : "13px",
-                  color: "#6d5537",
-                  fontWeight: 700,
+                  margin: 0,
+                  fontSize: isCompactMobile ? "15px" : "17px",
+                  color: "#5b4630",
+                  maxWidth: "40ch",
+                  lineHeight: 1.45,
+                  textAlign: "center",
+                  marginInline: "auto",
                 }}
               >
-                <span style={{ opacity: 0.72, textTransform: "uppercase", letterSpacing: "0.06em" }}>Next puzzle</span>
-                <span style={{ color: "#2f2419", fontWeight: 800 }}>{hasMounted ? resetCountdown : "--:--:--"}</span>
-              </div>
+                A lexicon is the vocabulary of a language, speaker, or subject.
+              </p>
             </div>
 
             <div
@@ -2858,7 +2892,6 @@ export default function Home() {
               <button
                 onClick={() => {
                   setViewMode("daily")
-                  setShowArchive(false)
                   setShowStats(false)
                 }}
                 style={{
@@ -2877,12 +2910,8 @@ export default function Home() {
 
               <button
                 onClick={() => {
-                  if (!currentUser || currentUser.anon) {
-                    setShowAuth(true); setAuthMode("login"); setAuthError("")
-                  } else {
-                    setShowArchive((prev) => !prev)
-                    setShowStats(false)
-                  }
+                  setViewMode("archive")
+                  setShowStats(false)
                 }}
                 style={homeActionButtonStyle}
               >
@@ -2890,18 +2919,13 @@ export default function Home() {
                   Browse
                 </div>
                 <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  {showArchive ? "Hide Archive" : "Open Archive"}
+                  Open Archive
                 </div>
               </button>
 
               <button
                 onClick={() => {
-                  if (!currentUser || currentUser.anon) {
-                    setShowAuth(true); setAuthMode("login"); setAuthError("")
-                  } else {
-                    setShowStats((prev) => !prev)
-                    setShowArchive(false)
-                  }
+                  setShowStats((prev) => !prev)
                 }}
                 style={homeActionButtonStyle}
               >
@@ -2934,8 +2958,7 @@ export default function Home() {
               </button>
             </div>
 
-            {statsPanel}
-            {archivePanel}
+            {inlineStatsPanel}
 
             <button
               onClick={() => setShowTutorial(true)}
@@ -3183,6 +3206,79 @@ export default function Home() {
               ?
             </button>
           </div>
+        ) : viewMode === "archive" ? (
+          <div
+            style={{
+              minHeight: isCompactMobile ? "calc(100dvh - 16px)" : "calc(100dvh - 48px)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: isCompactMobile ? "18px" : "22px",
+              maxWidth: "760px",
+              margin: "0 auto",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={goHome}
+              aria-label="Back"
+              style={{
+                position: "absolute",
+                top: isCompactMobile ? "4px" : "0",
+                left: isCompactMobile ? "0" : "4px",
+                width: isCompactMobile ? "42px" : "46px",
+                height: isCompactMobile ? "42px" : "46px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.16)",
+                background: "rgba(255,250,240,0.86)",
+                color: "#2f2419",
+                cursor: "pointer",
+                fontSize: isCompactMobile ? "26px" : "28px",
+                lineHeight: 1,
+                display: "grid",
+                placeItems: "center",
+                boxShadow: "0 10px 22px rgba(78, 56, 28, 0.08)",
+              }}
+            >
+              ‹
+            </button>
+
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "640px",
+                padding: isCompactMobile ? "28px 0 0" : "36px 0 0",
+              }}
+            >
+              {archivePanel}
+            </div>
+
+            <button
+              onClick={() => setShowTutorial(true)}
+              aria-label="How to Play"
+              style={{
+                position: "fixed",
+                right: isCompactMobile ? "14px" : "22px",
+                bottom: isCompactMobile ? "max(14px, calc(env(safe-area-inset-bottom) + 8px))" : "22px",
+                width: isCompactMobile ? "46px" : "52px",
+                height: isCompactMobile ? "46px" : "52px",
+                borderRadius: "999px",
+                border: "1px solid rgba(123, 98, 65, 0.22)",
+                background: "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
+                color: "#2f2419",
+                cursor: "pointer",
+                fontSize: isCompactMobile ? "22px" : "24px",
+                fontWeight: 800,
+                boxShadow: "0 12px 28px rgba(78, 56, 28, 0.12)",
+                display: "grid",
+                placeItems: "center",
+                zIndex: 15,
+              }}
+            >
+              ?
+            </button>
+          </div>
         ) : (
           <div
             style={{
@@ -3324,117 +3420,6 @@ export default function Home() {
           </div>
         )}
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: isCompactMobile ? "8px" : "12px",
-            flexWrap: "wrap",
-            marginBottom: isCompactMobile ? "8px" : "16px",
-            padding: isCompactMobile ? "10px 10px 8px" : "12px 16px",
-            borderRadius: isCompactMobile ? "18px" : "20px",
-            background: isCompactMobile
-              ? "linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(247,242,234,0.94) 100%)"
-              : "linear-gradient(180deg, rgba(255,250,240,0.92) 0%, rgba(247,237,220,0.92) 100%)",
-            border: "1px solid rgba(123, 98, 65, 0.14)",
-            boxShadow: isCompactMobile ? "0 10px 22px rgba(78, 56, 28, 0.08)" : "0 10px 24px rgba(78, 56, 28, 0.06)",
-            width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
-            maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
-            marginLeft: isCompactMobile ? "auto" : undefined,
-            marginRight: isCompactMobile ? "auto" : undefined,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: isCompactMobile ? "8px" : "10px", flexWrap: "wrap", width: isCompactMobile ? "100%" : undefined }}>
-            <div
-              style={{
-                background: isCompactMobile ? "#eef2f9" : "#dbe9ff",
-                color: isCompactMobile ? "#5f646e" : "#26456e",
-                borderRadius: isCompactMobile ? "14px" : "14px",
-                padding: isCompactMobile ? "10px 12px" : "10px 14px",
-                minWidth: isCompactMobile ? "96px" : "132px",
-                flex: isCompactMobile ? "1 1 0" : undefined,
-              }}
-            >
-              <div style={{ fontSize: isCompactMobile ? "11px" : "11px", textTransform: isCompactMobile ? "none" : "uppercase", letterSpacing: isCompactMobile ? "0" : "0.08em", fontWeight: 800, opacity: 0.72 }}>
-                {isCompactMobile ? "Score" : bestScore}
-              </div>
-              <div style={{ fontSize: isCompactMobile ? "18px" : "28px", fontWeight: 900, lineHeight: 1.1 }}>
-                {isCompactMobile ? bestScore : `${gameOver ? attemptHistory.length : turnNumber}/${maxAttempts}`}
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: isCompactMobile ? "transparent" : "#fff7dc",
-                color: "#6b4f14",
-                borderRadius: "999px",
-                padding: isCompactMobile ? "0" : "8px 14px",
-                display: "flex",
-                alignItems: "center",
-                gap: isCompactMobile ? "6px" : "8px",
-                fontWeight: 800,
-                justifyContent: "center",
-                flex: isCompactMobile ? "0 0 auto" : undefined,
-              }}
-            >
-              {isCompactMobile ? (
-                <div
-                  style={{
-                    width: "68px",
-                    height: "68px",
-                    borderRadius: "999px",
-                    background:
-                      `conic-gradient(#6aa5ff 0deg, #6aa5ff ${turnProgressDegrees}, #f0f2f6 ${turnProgressDegrees}, #f0f2f6 360deg)`,
-                    display: "grid",
-                    placeItems: "center",
-                    position: "relative",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "50px",
-                      height: "50px",
-                      borderRadius: "999px",
-                      background: "#fffdf8",
-                      display: "grid",
-                      placeItems: "center",
-                      boxShadow: "inset 0 0 0 1px rgba(123, 98, 65, 0.08)",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: "9px", color: "#8a6a42", lineHeight: 1, letterSpacing: "0.04em" }}>OPTIMAL</div>
-                      <div style={{ fontSize: "20px", color: "#f2b400", fontWeight: 900, lineHeight: 1.05 }}>
-                        {solution.bestScore}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <span style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.72 }}>
-                    Optimal
-                  </span>
-                  <span style={{ fontSize: isCompactMobile ? "20px" : "24px", lineHeight: 1 }}>{solution.bestScore}</span>
-                </>
-              )}
-            </div>
-
-          </div>
-
-          <div style={{ display: isCompactMobile ? "none" : "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end", width: isCompactMobile ? "auto" : undefined }}>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: isCompactMobile ? "11px" : "11px", textTransform: isCompactMobile ? "none" : "uppercase", letterSpacing: isCompactMobile ? "0" : "0.08em", color: "#8a6a42", fontWeight: 800 }}>
-                {solution.bestScore}
-              </div>
-              <div style={{ fontSize: isCompactMobile ? "18px" : "24px", fontWeight: 900, color: "#2f2419" }}>{isCompactMobile ? "Optimal" : bestScore}</div>
-            </div>
-          </div>
-        </div>
-        {statsPanel}
-        {archivePanel}
-
         {viewMode === "game" && uiFeedback && (
           <div
             key={`${uiFeedback.kind}-${uiFeedback.tick}`}
@@ -3469,20 +3454,77 @@ export default function Home() {
               : uiFeedback.kind === "hint"
               ? "Hint used"
               : uiFeedback.kind === "recall"
-              ? "Tiles recalled"
+              ? "Move cleared"
               : "Puzzle solved"}
+          </div>
+        )}
+
+        {showInGameStatsSheet && (
+          <div
+            onClick={() => setShowStats(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(34, 25, 13, 0.14)",
+              backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+              zIndex: 34,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "flex-start",
+              padding: isCompactMobile ? "max(10px, env(safe-area-inset-top)) 10px 0" : "20px 24px 0",
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: `min(${isCompactMobile ? "calc(100vw - 20px)" : "760px"}, calc(100vw - 24px))`,
+                maxHeight: isCompactMobile ? "min(66vh, 680px)" : "min(72vh, 760px)",
+                overflowY: "auto",
+                background: "linear-gradient(180deg, rgba(255,250,240,0.98) 0%, rgba(247,242,234,0.98) 100%)",
+                border: "1px solid rgba(123, 98, 65, 0.14)",
+                borderRadius: isCompactMobile ? "18px" : "22px",
+                boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
+                padding: isCompactMobile ? "16px" : "18px 20px",
+                animation: reducedMotionEnabled ? undefined : "pop-in-sheet 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "12px",
+                  marginBottom: "12px",
+                }}
+              >
+                <div style={{ fontSize: "13px", color: "#8a6a42", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Stats
+                </div>
+                <button
+                  onClick={() => setShowStats(false)}
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(123, 98, 65, 0.2)",
+                    backgroundColor: "#f5ead6",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              {statsContent}
+            </div>
           </div>
         )}
 
         <div
           style={{
-            background: isCompactMobile ? "transparent" : "rgba(255,250,240,0.88)",
-            border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.14)",
-            borderRadius: isCompactMobile ? "0" : "16px",
-            padding: isCompactMobile ? "2px 4px 0" : "14px 16px",
-            marginBottom: isCompactMobile ? "10px" : "18px",
-            boxShadow: isCompactMobile ? "none" : "0 10px 24px rgba(78, 56, 28, 0.06)",
-            textAlign: isCompactMobile ? "center" : "left",
+            padding: isCompactMobile ? "0 2px" : "0",
+            marginBottom: isCompactMobile ? "8px" : "14px",
             flexShrink: 0,
             width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
             maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
@@ -3490,71 +3532,59 @@ export default function Home() {
             marginRight: isCompactMobile ? "auto" : undefined,
           }}
         >
-          {!isCompactMobile && (
-            <div style={{ fontSize: isCompactMobile ? "10px" : "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", fontWeight: 700, marginBottom: isCompactMobile ? "4px" : "6px" }}>
-              Current Turn
-            </div>
-          )}
-          <div style={{ fontSize: isCompactMobile ? "15px" : "16px", lineHeight: 1.3, fontWeight: isCompactMobile ? 700 : 400 }}>{message}</div>
-          {submittedWords.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: isCompactMobile ? "10px" : "12px",
+              fontSize: isCompactMobile ? "13px" : "16px",
+              lineHeight: 1.25,
+              fontWeight: isCompactMobile ? 700 : 500,
+              color: "#3f3020",
+              textAlign: isCompactMobile ? "left" : "left",
+            }}
+          >
+            <span style={{ flex: "1 1 auto", minWidth: 0 }}>{message}</span>
             <div
               style={{
-                marginTop: "8px",
-                fontSize: isCompactMobile ? "14px" : "15px",
-                lineHeight: 1.35,
-                color: "#5b4630",
-                textAlign: isCompactMobile ? "center" : "left",
-                display: isCompactMobile ? "-webkit-box" : undefined,
-                WebkitLineClamp: isCompactMobile ? 1 : undefined,
-                WebkitBoxOrient: isCompactMobile ? "vertical" : undefined,
-                overflow: isCompactMobile ? "hidden" : undefined,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: isCompactMobile ? "6px" : "8px",
+                flexShrink: 0,
               }}
+              aria-label={`Turn ${Math.min(attemptHistory.length + 1, maxAttempts)} of ${maxAttempts}`}
             >
-              {submittedWords.map((item) => `${item.word} - ${item.score} points`).join(", ")}
-            </div>
-          )}
+              {Array.from({ length: maxAttempts }).map((_, index) => {
+                const isCompletedTurn = index < attemptHistory.length
+                const isCurrentTurn = !gameOver && index === currentTurnIndex
 
-          {!isCompactMobile && attemptHistory.length > 0 && (
-            <div
-              style={{
-                display: "grid",
-                marginTop: "14px",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42", marginBottom: "6px" }}>
-                  Run So Far
-                </div>
-                <ul style={{ margin: 0, paddingLeft: "18px" }}>
-                  {attemptHistory.map((attempt, index) => (
-                    <li key={index} style={{ marginBottom: "6px" }}>
-                      {getShareIcon(attempt.totalScore)} {getAttemptLabel(index, attempt.totalScore)}:{" "}
-                      {attempt.words.map((word) => word.word).join(", ")} - {attempt.totalScore}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                return (
+                  <span
+                    key={index}
+                    style={{
+                      width: isCurrentTurn ? (isCompactMobile ? "10px" : "12px") : (isCompactMobile ? "8px" : "10px"),
+                      height: isCurrentTurn ? (isCompactMobile ? "10px" : "12px") : (isCompactMobile ? "8px" : "10px"),
+                      borderRadius: "999px",
+                      backgroundColor: isCompletedTurn
+                        ? "#2f2419"
+                        : isCurrentTurn
+                        ? "#b98f58"
+                        : "rgba(123, 98, 65, 0.22)",
+                      boxShadow: isCurrentTurn
+                        ? `0 0 0 ${isCompactMobile ? "3px" : "4px"} rgba(185, 143, 88, 0.16)`
+                        : "none",
+                      transition: reducedMotionEnabled
+                        ? undefined
+                        : "transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease",
+                      transform: isCurrentTurn ? "scale(1.05)" : "scale(1)",
+                    }}
+                  />
+                )
+              })}
             </div>
-          )}
-
-          {!isCompactMobile && canShare && (
-            <button
-              onClick={shareResults}
-              style={{
-                padding: "10px 14px",
-                fontSize: "14px",
-                borderRadius: "999px",
-                border: "1px solid rgba(123, 98, 65, 0.2)",
-                backgroundColor: "#f5ead6",
-                cursor: "pointer",
-                color: "#2f2419",
-                fontWeight: 700,
-                marginTop: "14px",
-              }}
-            >
-              Share Results
-            </button>
-          )}
+          </div>
         </div>
 
         {gameOver && showResultsModal && (
@@ -3578,7 +3608,9 @@ export default function Home() {
               style={{
                 position: "relative",
                 width: `min(${isCompactMobile ? "calc(100vw - 16px)" : "620px"}, calc(100vw - 24px))`,
-                padding: isCompactMobile ? "16px 16px 14px" : "20px",
+                maxHeight: isCompactMobile ? "min(78vh, 720px)" : undefined,
+                overflowY: isCompactMobile ? "auto" : undefined,
+                padding: isCompactMobile ? "14px 14px 12px" : "20px",
                 background: "linear-gradient(180deg, rgba(245,251,239,0.98) 0%, rgba(237,246,231,0.98) 100%)",
                 border: "1px solid rgba(98, 128, 76, 0.22)",
                 borderRadius: isCompactMobile ? "18px" : "22px",
@@ -3616,13 +3648,12 @@ export default function Home() {
             <strong>{isPerfectFirstTryRun() ? "Perfect First Try" : "Results"}</strong>
             <p style={{ marginTop: "10px" }}>
               {isPerfectFirstTryRun() ? (
-                <>You found the optimal play immediately with <strong>{bestScore}</strong> points.</>
+                <>
+                  You found the top play immediately with <strong>{bestScore}/{solution.bestScore}</strong>.
+                </>
               ) : (
-                <>Your best score: <strong>{bestScore}</strong></>
+                <>Your best score: <strong>{bestScore}/{solution.bestScore}</strong></>
               )}
-            </p>
-            <p>
-              Optimal score: <strong>{solution.bestScore}</strong>
             </p>
             <p>
               {isPerfectFirstTryRun() ? (
@@ -3661,21 +3692,6 @@ export default function Home() {
                 }}
               >
                 Home
-              </button>
-
-              <button
-                onClick={resetGame}
-                style={{
-                  padding: "11px 16px",
-                  fontSize: "15px",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(123, 98, 65, 0.2)",
-                  backgroundColor: "#d7c3a0",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                }}
-              >
-                Reset Today’s Puzzle
               </button>
 
               <button
@@ -3978,27 +3994,34 @@ export default function Home() {
 
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: isCompactMobile ? "10px" : "18px",
-            alignItems: "stretch",
             flex: isCompactMobile ? 1 : undefined,
             minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: isCompactMobile ? "center" : undefined,
           }}
         >
           <div
             style={{
-              background:
-                "linear-gradient(180deg, var(--board-shell-start) 0%, var(--board-shell-mid) 42%, var(--board-shell-end) 100%)",
-              padding: isCompactMobile ? "8px" : "14px",
-              borderRadius: isCompactMobile ? "18px" : "22px",
-              boxShadow: "0 16px 34px var(--board-shell-shadow)",
-              width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
-              maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
-              overflowX: isCompactMobile ? "hidden" : "auto",
-              margin: isCompactMobile ? "0 auto" : undefined,
+              display: "flex",
+              flexDirection: "column",
+              gap: isCompactMobile ? "10px" : "18px",
+              alignItems: "stretch",
             }}
           >
+            <div
+              style={{
+                background:
+                  "linear-gradient(180deg, var(--board-shell-start) 0%, var(--board-shell-mid) 42%, var(--board-shell-end) 100%)",
+                padding: isCompactMobile ? `${compactBoardShellPadding}px` : "14px",
+                borderRadius: isCompactMobile ? "16px" : "22px",
+                boxShadow: "0 16px 34px var(--board-shell-shadow)",
+                width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
+                maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
+                overflowX: isCompactMobile ? "hidden" : "auto",
+                margin: isCompactMobile ? "0 auto" : undefined,
+              }}
+            >
             <div
               style={{
                 display: "grid",
@@ -4042,13 +4065,28 @@ export default function Home() {
                     draggable={isMovablePlacedTile && !gameOver}
                     onDragStart={(e) => {
                       if (placedTile) {
-                        handlePlacedTileDragStart(e, row, col, letter, placedTile.isBlank)
+                        handlePlacedTileDragStart(
+                          e,
+                          row,
+                          col,
+                          letter,
+                          placedTile.isBlank,
+                          placedTile.rackIndex
+                        )
                       }
                     }}
                     onDragEnd={handlePlacedTileDragEnd}
                     onTouchStart={
                       placedTile
-                        ? (e) => handlePlacedTouchStart(e, row, col, letter, placedTile.isBlank)
+                        ? (e) =>
+                            handlePlacedTouchStart(
+                              e,
+                              row,
+                              col,
+                              letter,
+                              placedTile.isBlank,
+                              placedTile.rackIndex
+                            )
                         : undefined
                     }
                     style={{
@@ -4298,9 +4336,9 @@ export default function Home() {
                 background: isCompactMobile ? "transparent" : "rgba(255,250,240,0.84)",
                 border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.14)",
                 borderRadius: isCompactMobile ? "0" : "20px",
-                padding: isCompactMobile ? "8px 0 0" : "16px",
+                padding: isCompactMobile ? "6px 0 0" : "16px",
                 boxShadow: isCompactMobile ? "none" : "0 12px 28px rgba(78, 56, 28, 0.06)",
-                marginTop: isCompactMobile ? "10px" : "16px",
+                marginTop: isCompactMobile ? "8px" : "16px",
               }}
             >
               {!isCompactMobile && (
@@ -4462,10 +4500,10 @@ export default function Home() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: isCompactMobile
-                    ? "0.8fr 1fr 1fr 1.15fr"
+                    ? "0.78fr 0.95fr 0.95fr 1.12fr"
                     : "minmax(80px, 0.95fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(180px, 1.4fr)",
-                  gap: isCompactMobile ? "8px" : "10px",
-                  marginTop: isCompactMobile ? "12px" : "18px",
+                  gap: isCompactMobile ? "6px" : "10px",
+                  marginTop: isCompactMobile ? "10px" : "18px",
                   alignItems: "stretch",
                 }}
               >
@@ -4476,8 +4514,8 @@ export default function Home() {
                       width: "100%",
                       height: "100%",
                       minHeight: `${actionButtonMinHeight}px`,
-                      padding: isCompactMobile ? "8px 8px" : "10px 12px",
-                      fontSize: isCompactMobile ? "12px" : "14px",
+                      padding: isCompactMobile ? "6px 6px" : "10px 12px",
+                      fontSize: isCompactMobile ? "11px" : "14px",
                       borderRadius: isCompactMobile ? "16px" : "18px",
                       border: "none",
                       backgroundColor: isCompactMobile ? "transparent" : showMoreActions ? "#d7c3a0" : "#efe2c7",
@@ -4537,27 +4575,6 @@ export default function Home() {
 
                       <button
                         onClick={() => {
-                          clearCurrentMove()
-                          setShowMoreActions(false)
-                        }}
-                        disabled={gameOver}
-                        style={{
-                          padding: "10px 12px",
-                          fontSize: "14px",
-                          borderRadius: "14px",
-                          border: "1px solid rgba(123, 98, 65, 0.2)",
-                          backgroundColor: gameOver ? "#ddd6c8" : "#efe2c7",
-                          cursor: gameOver ? "not-allowed" : "pointer",
-                          color: "#2f2419",
-                          fontWeight: 700,
-                          textAlign: "left",
-                        }}
-                      >
-                        Clear Move
-                      </button>
-
-                      <button
-                        onClick={() => {
                           setShowSettings(true)
                           setShowMoreActions(false)
                         }}
@@ -4599,27 +4616,6 @@ export default function Home() {
                           Sign In
                         </button>
                       )}
-
-                      <button
-                        onClick={() => {
-                          resetGame()
-                          setShowMoreActions(false)
-                        }}
-                        style={{
-                          padding: "10px 12px",
-                          fontSize: "14px",
-                          borderRadius: "14px",
-                          border: "1px solid rgba(123, 98, 65, 0.2)",
-                          backgroundColor: "#f5ead6",
-                          cursor: "pointer",
-                          color: "#2f2419",
-                          fontWeight: 700,
-                          textAlign: "left",
-                        }}
-                      >
-                        Reset Puzzle
-                      </button>
-
                       {canShare && (
                         <button
                           onClick={() => {
@@ -4646,13 +4642,13 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={undoLastTile}
+                  onClick={clearCurrentMove}
                   disabled={gameOver || placedTiles.length === 0}
                   style={{
                     width: "100%",
                     minHeight: `${actionButtonMinHeight}px`,
-                    padding: isCompactMobile ? "8px 8px" : "10px 14px",
-                    fontSize: isCompactMobile ? "13px" : "15px",
+                    padding: isCompactMobile ? "6px 6px" : "10px 14px",
+                    fontSize: isCompactMobile ? "12px" : "15px",
                     borderRadius: isCompactMobile ? "16px" : "18px",
                     border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.2)",
                     backgroundColor:
@@ -4669,7 +4665,7 @@ export default function Home() {
                         : undefined,
                   }}
                 >
-                  Recall
+                  Clear
                 </button>
 
                 <button
@@ -4678,8 +4674,8 @@ export default function Home() {
                   style={{
                     width: "100%",
                     minHeight: `${actionButtonMinHeight}px`,
-                    padding: isCompactMobile ? "8px 8px" : "10px 14px",
-                    fontSize: isCompactMobile ? "13px" : "15px",
+                    padding: isCompactMobile ? "6px 6px" : "10px 14px",
+                    fontSize: isCompactMobile ? "12px" : "15px",
                     borderRadius: isCompactMobile ? "16px" : "18px",
                     border: isCompactMobile ? "none" : "1px solid rgba(69,50,27,0.18)",
                     backgroundColor: isCompactMobile ? "transparent" : gameOver ? "#ddd6c8" : "#efe2c7",
@@ -4698,8 +4694,8 @@ export default function Home() {
                   style={{
                     width: "100%",
                     minHeight: `${actionButtonMinHeight}px`,
-                    padding: isCompactMobile ? "10px 10px" : "12px 18px",
-                    fontSize: isCompactMobile ? "14px" : "16px",
+                    padding: isCompactMobile ? "8px 8px" : "12px 18px",
+                    fontSize: isCompactMobile ? "13px" : "16px",
                     borderRadius: "999px",
                     border: isCompactMobile ? "none" : "1px solid rgba(34,25,13,0.12)",
                     backgroundColor: isCompactMobile ? "#b9b4b0" : gameOver ? "#ddd6c8" : "#17120d",
@@ -4719,7 +4715,8 @@ export default function Home() {
                 </button>
               </div>
             </div>
-          </div>
+        </div>
+        </div>
         </div>
         </div>
         )}
@@ -4785,9 +4782,11 @@ export default function Home() {
             style={{
               backgroundColor: "#fffaf0",
               borderRadius: "18px",
-              padding: isCompactMobile ? "20px 18px" : "24px",
+              padding: isCompactMobile ? "18px 16px" : "24px",
               maxWidth: "440px",
               width: "100%",
+              maxHeight: isCompactMobile ? "min(80vh, 680px)" : undefined,
+              overflowY: isCompactMobile ? "auto" : undefined,
               border: "1px solid rgba(123, 98, 65, 0.18)",
               boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
               color: "#2f2419",
@@ -5163,7 +5162,7 @@ export default function Home() {
                 <strong>Score big</strong> with bonus squares: DL (double letter), TL (triple letter), DW (double word), TW (triple word). Bonuses apply only to newly placed tiles.
               </li>
               <li>
-                You have <strong>3 attempts</strong>. Your best score is compared to the optimal score, but if you hit the optimal score on your first try, the puzzle ends immediately.
+                You have <strong>3 attempts</strong>. Try to find the top play, and if you hit it on your first try, the puzzle ends immediately.
               </li>
               <li>
                 On <strong>mobile</strong>, drag tiles by touch or tap a tile then tap a board square.

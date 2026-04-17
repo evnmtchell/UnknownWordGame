@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Unknown Word Game",
+  title: "Lexicon",
   description: "A daily word puzzle where every move counts.",
 }
 
