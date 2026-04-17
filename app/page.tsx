@@ -711,8 +711,15 @@ export default function Home() {
     return () => document.removeEventListener("touchmove", onTouchMove)
   }, [touchDragActivationDistance])
 
+  const hasUserActed = useRef(false)
   useEffect(() => {
-    if (!hasLoadedSave) return
+    if (attemptHistory.length > 0 || hintLevel > 0 || attemptsLeft < 3) {
+      hasUserActed.current = true
+    }
+  }, [attemptHistory, hintLevel, attemptsLeft])
+
+  useEffect(() => {
+    if (!hasLoadedSave || !hasUserActed.current) return
 
     const dataToSave: SavedGameState = {
       attemptsLeft,
