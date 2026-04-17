@@ -498,20 +498,18 @@ export default function Home() {
 
   useEffect(() => {
     function applySessionData(parsed: Partial<SavedGameState>) {
-      startTransition(() => {
-        if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
-        if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
-        if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
-        if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
-        if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
-        if (parsed.message) setMessage(parsed.message)
-        const savedHintLevel = parsed.hintLevel ?? (parsed.hintUsed ? 1 : 0)
-        if (savedHintLevel > 0) {
-          setHintLevel(savedHintLevel)
-          setShowHint(false)
-        }
-        setHasLoadedSave(true)
-      })
+      if (parsed.attemptsLeft !== undefined) setAttemptsLeft(parsed.attemptsLeft)
+      if (parsed.bestScore !== undefined) setBestScore(parsed.bestScore)
+      if (parsed.attemptHistory) setAttemptHistory(parsed.attemptHistory)
+      if (parsed.submittedWords) setSubmittedWords(parsed.submittedWords)
+      if (parsed.submittedScore !== undefined) setSubmittedScore(parsed.submittedScore)
+      if (parsed.message) setMessage(parsed.message)
+      const savedHintLevel = parsed.hintLevel ?? (parsed.hintUsed ? 1 : 0)
+      if (savedHintLevel > 0) {
+        setHintLevel(savedHintLevel)
+        setShowHint(false)
+      }
+      setHasLoadedSave(true)
       if (parsed.attemptsLeft === 0) statsUpdatedRef.current = true
     }
 
