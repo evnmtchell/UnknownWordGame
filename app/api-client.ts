@@ -143,6 +143,38 @@ export function isLoggedIn(): boolean {
   return auth !== null && !auth.anon
 }
 
+export function loginWithGoogle() {
+  window.location.href = `${API_BASE}/auth/google`
+}
+
+export function loginWithApple() {
+  window.location.href = `${API_BASE}/auth/apple`
+}
+
+export function handleOAuthCallback(): AuthState | null {
+  const params = new URLSearchParams(window.location.search)
+  const token = params.get("token")
+  const username = params.get("username")
+  const userId = params.get("user_id")
+  const authError = params.get("auth_error")
+
+  if (authError) {
+    // Clean URL
+    window.history.replaceState({}, "", window.location.pathname)
+    return null
+  }
+
+  if (token && username && userId) {
+    const auth: AuthState = { token, user_id: userId, username, anon: false }
+    storeAuth(auth)
+    // Clean URL
+    window.history.replaceState({}, "", window.location.pathname)
+    return auth
+  }
+
+  return null
+}
+
 // ==========================================
 // DATA FUNCTIONS
 // ==========================================

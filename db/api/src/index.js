@@ -20,7 +20,12 @@ if (!JWT_SECRET) {
   process.exit(1)
 }
 
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://dinkdaddy.org"
+
 const ALLOWED_ORIGINS = [
+  "https://dinkdaddy.org",
   "https://unknown-word-game.pages.dev",
   "https://lexicon.plantos.co",
   "http://localhost:3000",
@@ -183,6 +188,163 @@ app.post("/auth/upgrade", authMiddleware, async (req, res) => {
       return res.status(409).json({ error: "Username or email already taken" })
     }
     res.status(500).json({ error: err.message })
+  }
+})
+
+// ==========================================
+// GOOGLE SSO
+// ==========================================
+
+// GET /auth/google — redirect to Google consent screen
+app.get("/auth/google", (_req, res) => {
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: "https://api-lexicon.plantos.co/auth/google/callback",
+    response_type: "code",
+    scope: "openid email profile",
+    access_type: "offline",
+    prompt: "select_account",
+  })
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
+})
+
+// GET /auth/google/callback — handle Google OAuth callback
+app.get("/auth/google/callback", async (req, res) => {
+  const { code } = req.query
+  if (!code) return res.status(400).send("Missing code")
+
+  try {
+    // Exchange code for tokens
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: "https://api-lexicon.plantos.co/auth/google/callback",
+        grant_type: "authorization_code",
+      }),
+    })
+    const tokens = await tokenRes.json()
+    if (!tokens.id_token) throw new Error("No id_token from Google")
+
+    // Decode the ID token to get user info
+    const payload = JSON.parse(Buffer.from(tokens.id_token.split(".")[1], "base64url").toString())
+    const { email, name, sub: googleId } = payload
+
+    // Find or create user
+    let { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email])
+
+    if (rows.length === 0) {
+      const result = await pool.query(
+        `INSERT INTO users (username, email) VALUES ($1, $2) RETURNING *`,
+        [name || email.split("@")[0], email]
+      )
+      rows = result.rows
+    }
+
+    const user = rows[0]
+    const jwtToken = signToken({ ...user, anon: false })
+
+    // Redirect back to frontend with token
+    res.redirect(`${FRONTEND_URL}?token=${encodeURIComponent(jwtToken)}&username=${encodeURIComponent(user.username)}&user_id=${user.id}`)
+  } catch (err) {
+    console.error("Google auth error:", err)
+    res.redirect(`${FRONTEND_URL}?auth_error=${encodeURIComponent("Google sign in failed")}`)
+  }
+})
+
+// ==========================================
+// APPLE SSO
+// ==========================================
+
+function generateAppleClientSecret() {
+  const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID
+  const APPLE_KEY_ID = process.env.APPLE_KEY_ID
+  const APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY
+  const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID
+
+  return jwt.sign({}, APPLE_PRIVATE_KEY, {
+    algorithm: "ES256",
+    expiresIn: "180d",
+    audience: "https://appleid.apple.com",
+    issuer: APPLE_TEAM_ID,
+    subject: APPLE_CLIENT_ID,
+    keyid: APPLE_KEY_ID,
+  })
+}
+
+// GET /auth/apple — redirect to Apple consent screen
+app.get("/auth/apple", (_req, res) => {
+  const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID
+  const params = new URLSearchParams({
+    client_id: APPLE_CLIENT_ID,
+    redirect_uri: "https://api-lexicon.plantos.co/auth/apple/callback",
+    response_type: "code",
+    scope: "name email",
+    response_mode: "form_post",
+  })
+  res.redirect(`https://appleid.apple.com/auth/authorize?${params}`)
+})
+
+// POST /auth/apple/callback — handle Apple OAuth callback
+app.post("/auth/apple/callback", express.urlencoded({ extended: true }), async (req, res) => {
+  const { code, user: appleUser } = req.body
+  if (!code) return res.status(400).send("Missing code")
+
+  try {
+    const clientSecret = generateAppleClientSecret()
+    const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID
+
+    // Exchange code for tokens
+    const tokenRes = await fetch("https://appleid.apple.com/auth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: APPLE_CLIENT_ID,
+        client_secret: clientSecret,
+        redirect_uri: "https://api-lexicon.plantos.co/auth/apple/callback",
+        grant_type: "authorization_code",
+      }),
+    })
+    const tokens = await tokenRes.json()
+    if (!tokens.id_token) throw new Error("No id_token from Apple")
+
+    // Decode the ID token
+    const payload = JSON.parse(Buffer.from(tokens.id_token.split(".")[1], "base64url").toString())
+    const { email, sub: appleId } = payload
+
+    // Apple only sends name on first auth — parse it if available
+    let name = null
+    if (appleUser) {
+      try {
+        const parsed = typeof appleUser === "string" ? JSON.parse(appleUser) : appleUser
+        name = [parsed.name?.firstName, parsed.name?.lastName].filter(Boolean).join(" ")
+      } catch { /* ignore */ }
+    }
+
+    // Find or create user
+    let { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email])
+
+    if (rows.length === 0) {
+      const username = name || (email ? email.split("@")[0] : `apple-${appleId.slice(0, 8)}`)
+      const result = await pool.query(
+        `INSERT INTO users (username, email) VALUES ($1, $2) RETURNING *`,
+        [username, email]
+      )
+      rows = result.rows
+    }
+
+    const user = rows[0]
+    const jwtToken = signToken({ ...user, anon: false })
+
+    // Redirect back to frontend with token
+    res.redirect(`${FRONTEND_URL}?token=${encodeURIComponent(jwtToken)}&username=${encodeURIComponent(user.username)}&user_id=${user.id}`)
+  } catch (err) {
+    console.error("Apple auth error:", err)
+    res.redirect(`${FRONTEND_URL}?auth_error=${encodeURIComponent("Apple sign in failed")}`)
   }
 })
 
