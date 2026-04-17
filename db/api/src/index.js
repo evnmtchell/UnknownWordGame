@@ -76,6 +76,83 @@ function authMiddleware(req, res, next) {
 }
 
 // ==========================================
+// MERGE ANONYMOUS DATA INTO AUTHENTICATED USER
+// ==========================================
+
+async function mergeAnonymousData(anonUserId, realUserId) {
+  if (!anonUserId || anonUserId === realUserId) return
+
+  try {
+    // Move game sessions from anon to real user (skip conflicts)
+    await pool.query(
+      `UPDATE game_sessions SET user_id = $1
+       WHERE user_id = $2
+       AND puzzle_id NOT IN (SELECT puzzle_id FROM game_sessions WHERE user_id = $1)`,
+      [realUserId, anonUserId]
+    )
+
+    // Merge stats: keep the better values
+    const { rows: anonStats } = await pool.query(
+      "SELECT * FROM user_stats WHERE user_id = $1", [anonUserId]
+    )
+    const { rows: realStats } = await pool.query(
+      "SELECT * FROM user_stats WHERE user_id = $1", [realUserId]
+    )
+
+    if (anonStats.length > 0) {
+      const anon = anonStats[0]
+      if (realStats.length === 0) {
+        // No stats for real user yet — just reassign
+        await pool.query(
+          "UPDATE user_stats SET user_id = $1 WHERE user_id = $2",
+          [realUserId, anonUserId]
+        )
+      } else {
+        // Merge: sum games, keep best streaks, merge rating counts
+        const real = realStats[0]
+        const mergedRatings = { ...real.rating_counts }
+        for (const [key, val] of Object.entries(anon.rating_counts || {})) {
+          mergedRatings[key] = (mergedRatings[key] || 0) + val
+        }
+
+        await pool.query(
+          `UPDATE user_stats SET
+            games_played = $2,
+            current_streak = GREATEST(current_streak, $3),
+            max_streak = GREATEST(max_streak, $4),
+            perfect_current_streak = GREATEST(perfect_current_streak, $5),
+            perfect_max_streak = GREATEST(perfect_max_streak, $6),
+            last_played_date = GREATEST(last_played_date, $7),
+            last_perfect_date = GREATEST(last_perfect_date, $8),
+            rating_counts = $9,
+            updated_at = now()
+          WHERE user_id = $1`,
+          [
+            realUserId,
+            real.games_played + anon.games_played,
+            anon.current_streak,
+            anon.max_streak,
+            anon.perfect_current_streak,
+            anon.perfect_max_streak,
+            anon.last_played_date,
+            anon.last_perfect_date,
+            JSON.stringify(mergedRatings),
+          ]
+        )
+        // Remove old anon stats
+        await pool.query("DELETE FROM user_stats WHERE user_id = $1", [anonUserId])
+      }
+    }
+
+    // Clean up: delete anon user's remaining sessions and the anon user
+    await pool.query("DELETE FROM game_sessions WHERE user_id = $1", [anonUserId])
+    await pool.query("DELETE FROM users WHERE id = $1", [anonUserId])
+  } catch (err) {
+    console.error("Merge error:", err.message)
+  }
+}
+
+// ==========================================
 // AUTH ROUTES (no auth required)
 // ==========================================
 
@@ -96,7 +173,7 @@ app.get("/auth/token", async (_req, res) => {
 
 // POST /auth/register
 app.post("/auth/register", async (req, res) => {
-  const { username, email, password } = req.body
+  const { username, email, password, anon_user_id } = req.body
 
   if (!username || !password) {
     return res.status(400).json({ error: "username and password required" })
@@ -114,6 +191,7 @@ app.post("/auth/register", async (req, res) => {
       [username, email || null, passwordHash]
     )
     const user = rows[0]
+    if (anon_user_id) await mergeAnonymousData(anon_user_id, user.id)
     const token = signToken({ ...user, anon: false })
     res.json({ token, user_id: user.id, username: user.username, anon: false })
   } catch (err) {
@@ -126,7 +204,7 @@ app.post("/auth/register", async (req, res) => {
 
 // POST /auth/login
 app.post("/auth/login", async (req, res) => {
-  const { username, password } = req.body
+  const { username, password, anon_user_id } = req.body
 
   if (!username || !password) {
     return res.status(400).json({ error: "username and password required" })
@@ -152,6 +230,7 @@ app.post("/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid username or password" })
     }
 
+    if (anon_user_id) await mergeAnonymousData(anon_user_id, user.id)
     const token = signToken({ ...user, anon: false })
     res.json({ token, user_id: user.id, username: user.username, anon: false })
   } catch (err) {
@@ -199,7 +278,8 @@ app.post("/auth/upgrade", authMiddleware, async (req, res) => {
 // ==========================================
 
 // GET /auth/google — redirect to Google consent screen
-app.get("/auth/google", (_req, res) => {
+app.get("/auth/google", (req, res) => {
+  const anonId = req.query.anon_user_id || ""
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: "https://api-lexicon.plantos.co/auth/google/callback",
@@ -207,13 +287,14 @@ app.get("/auth/google", (_req, res) => {
     scope: "openid email profile",
     access_type: "offline",
     prompt: "select_account",
+    state: anonId,
   })
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
 })
 
 // GET /auth/google/callback — handle Google OAuth callback
 app.get("/auth/google/callback", async (req, res) => {
-  const { code } = req.query
+  const { code, state: anonUserId } = req.query
   if (!code) return res.status(400).send("Missing code")
 
   try {
@@ -248,6 +329,7 @@ app.get("/auth/google/callback", async (req, res) => {
     }
 
     const user = rows[0]
+    if (anonUserId) await mergeAnonymousData(anonUserId, user.id)
     const jwtToken = signToken({ ...user, anon: false })
 
     // Redirect back to frontend with token
@@ -287,7 +369,8 @@ function generateAppleClientSecret() {
 }
 
 // GET /auth/apple — redirect to Apple consent screen
-app.get("/auth/apple", (_req, res) => {
+app.get("/auth/apple", (req, res) => {
+  const anonId = req.query.anon_user_id || ""
   const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID
   const params = new URLSearchParams({
     client_id: APPLE_CLIENT_ID,
@@ -295,13 +378,14 @@ app.get("/auth/apple", (_req, res) => {
     response_type: "code",
     scope: "name email",
     response_mode: "form_post",
+    state: anonId,
   })
   res.redirect(`https://appleid.apple.com/auth/authorize?${params}`)
 })
 
 // POST /auth/apple/callback — handle Apple OAuth callback
 app.post("/auth/apple/callback", express.urlencoded({ extended: true }), async (req, res) => {
-  const { code, user: appleUser } = req.body
+  const { code, user: appleUser, state: anonUserId } = req.body
   if (!code) return res.status(400).send("Missing code")
 
   try {
@@ -349,6 +433,7 @@ app.post("/auth/apple/callback", express.urlencoded({ extended: true }), async (
     }
 
     const user = rows[0]
+    if (anonUserId) await mergeAnonymousData(anonUserId, user.id)
     const jwtToken = signToken({ ...user, anon: false })
 
     // Redirect back to frontend with token

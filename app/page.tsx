@@ -727,7 +727,9 @@ export default function Home() {
 
     localStorage.setItem(storageKey, JSON.stringify(dataToSave))
 
-    // Dual-write to database
+    // Only dual-write to DB after a real game action (not initial load)
+    if (attemptHistory.length === 0 && bestScore === 0 && attemptsLeft === 3) return
+
     saveSession({
       date: puzzle.date,
       mode: loadedGameConfig.mode,

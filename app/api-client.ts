@@ -88,7 +88,7 @@ export async function register(username: string, email: string, password: string
   const res = await fetch(`${API_BASE}${endpoint}`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, email, password, anon_user_id: auth?.anon ? auth.user_id : undefined }),
   })
 
   if (!res.ok) {
@@ -108,10 +108,11 @@ export async function register(username: string, email: string, password: string
 }
 
 export async function login(username: string, password: string): Promise<AuthState> {
+  const auth = getStoredAuth()
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, anon_user_id: auth?.anon ? auth.user_id : undefined }),
   })
 
   if (!res.ok) {
@@ -144,11 +145,15 @@ export function isLoggedIn(): boolean {
 }
 
 export function loginWithGoogle() {
-  window.location.href = `${API_BASE}/auth/google`
+  const auth = getStoredAuth()
+  const anonParam = auth?.anon ? `?anon_user_id=${auth.user_id}` : ""
+  window.location.href = `${API_BASE}/auth/google${anonParam}`
 }
 
 export function loginWithApple() {
-  window.location.href = `${API_BASE}/auth/apple`
+  const auth = getStoredAuth()
+  const anonParam = auth?.anon ? `?anon_user_id=${auth.user_id}` : ""
+  window.location.href = `${API_BASE}/auth/apple${anonParam}`
 }
 
 export function handleOAuthCallback(): AuthState | null {
