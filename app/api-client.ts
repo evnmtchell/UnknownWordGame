@@ -274,3 +274,43 @@ export async function loadStats(): Promise<{
     return null
   }
 }
+
+// ==========================================
+// SHARE FUNCTIONS
+// ==========================================
+
+const ARRIVED_FROM_REF_KEY = "lexicon-arrived-from-ref"
+
+export function storeArrivedFromRef() {
+  const params = new URLSearchParams(window.location.search)
+  const ref = params.get("ref")
+  if (ref) {
+    localStorage.setItem(ARRIVED_FROM_REF_KEY, ref)
+    fetch(`${API_BASE}/share/click`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref_code: ref, visitor_id: getStoredAuth()?.user_id }),
+    }).catch(() => {})
+  }
+}
+
+export async function createShareLink(puzzleDate: string, puzzleMode: string, bestScore: number): Promise<string | null> {
+  try {
+    const arrivedFromRef = localStorage.getItem(ARRIVED_FROM_REF_KEY)
+    const res = await authFetch("/api/shares", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        puzzle_date: puzzleDate,
+        puzzle_mode: puzzleMode,
+        best_score: bestScore,
+        arrived_from_ref: arrivedFromRef,
+      }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.ref_code
+  } catch {
+    return null
+  }
+}

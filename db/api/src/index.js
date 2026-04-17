@@ -463,10 +463,101 @@ app.get("/health", async (_req, res) => {
 })
 
 // ==========================================
+// SHARE TRACKING (click endpoint is public, create requires auth)
+// ==========================================
+
+// POST /share/click — log a click on a share link (no auth required)
+app.post("/share/click", async (req, res) => {
+  const { ref_code, visitor_id } = req.body
+  if (!ref_code) return res.status(400).json({ error: "ref_code required" })
+
+  try {
+    await pool.query(
+      "INSERT INTO share_clicks (ref_code, visitor_id) VALUES ($1, $2)",
+      [ref_code, visitor_id || null]
+    )
+    res.json({ ok: true })
+  } catch (err) {
+    // Don't fail if ref_code doesn't exist — just ignore
+    res.json({ ok: true })
+  }
+})
+
+// GET /share/:ref — get share link info (public, for displaying shared puzzle)
+app.get("/share/:ref", async (req, res) => {
+  const { ref } = req.params
+  try {
+    const { rows } = await pool.query(
+      "SELECT ref_code, puzzle_date, puzzle_mode, best_score, created_at FROM share_links WHERE ref_code = $1",
+      [ref]
+    )
+    if (rows.length === 0) return res.status(404).json({ error: "Share not found" })
+    res.json(rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ==========================================
 // PROTECTED API ROUTES (JWT required)
 // ==========================================
 
 app.use("/api", authMiddleware)
+
+// POST /api/shares — create a share link
+app.post("/api/shares", async (req, res) => {
+  const { puzzle_date, puzzle_mode, best_score, arrived_from_ref } = req.body
+  const userId = req.user.user_id
+
+  if (!puzzle_date || !puzzle_mode) {
+    return res.status(400).json({ error: "puzzle_date and puzzle_mode required" })
+  }
+
+  try {
+    // Generate a short unique ref code
+    const refCode = crypto.randomUUID().slice(0, 8)
+
+    const { rows } = await pool.query(
+      `INSERT INTO share_links (ref_code, user_id, puzzle_date, puzzle_mode, best_score)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [refCode, userId, puzzle_date, puzzle_mode, best_score || 0]
+    )
+
+    // If this user arrived via a share link, record the chain
+    if (arrived_from_ref) {
+      await pool.query(
+        `INSERT INTO share_chains (parent_ref, child_ref)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [arrived_from_ref, refCode]
+      ).catch(() => {}) // ignore if parent doesn't exist
+    }
+
+    res.json({ ref_code: rows[0].ref_code })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/shares/stats — get share analytics for current user
+app.get("/api/shares/stats", async (req, res) => {
+  const userId = req.user.user_id
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT sl.ref_code, sl.puzzle_date, sl.puzzle_mode, sl.best_score, sl.created_at,
+              count(sc.id) as click_count
+       FROM share_links sl
+       LEFT JOIN share_clicks sc ON sl.ref_code = sc.ref_code
+       WHERE sl.user_id = $1
+       GROUP BY sl.id
+       ORDER BY sl.created_at DESC`,
+      [userId]
+    )
+    res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // GET /api/puzzles — list available puzzle dates
 app.get("/api/puzzles", async (_req, res) => {

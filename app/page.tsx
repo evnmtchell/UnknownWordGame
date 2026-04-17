@@ -5,7 +5,7 @@ import { VALID_WORDS } from "./words"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
-import { saveSession, saveStats, loadSession, loadStats, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback } from "./api-client"
+import { saveSession, saveStats, loadSession, loadStats, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -525,6 +525,8 @@ export default function Home() {
 
   useEffect(() => {
     setHasMounted(true)
+    // Track share link clicks
+    storeArrivedFromRef()
     // Handle OAuth redirect callback (Google/Apple)
     const oauthResult = handleOAuthCallback()
     if (oauthResult) {
@@ -2164,9 +2166,14 @@ export default function Home() {
       const icon = getShareIcon(attempt.totalScore)
       return `${icon} ${getAttemptLabel(index, attempt.totalScore)}: ${attempt.totalScore}`
     })
-    const text = [header, summary, hintSummary, "", ...lines].filter(Boolean).join("\n")
-    const shareUrl =
-      typeof window !== "undefined" ? window.location.href : undefined
+
+    // Generate tracked share link
+    const refCode = await createShareLink(puzzle.date, activeGameMode, bestScore)
+    const shareUrl = refCode
+      ? `https://dinkdaddy.org?ref=${refCode}`
+      : "https://dinkdaddy.org"
+
+    const text = [header, summary, hintSummary, "", ...lines, "", `Play today's puzzle: ${shareUrl}`].filter(Boolean).join("\n")
 
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
