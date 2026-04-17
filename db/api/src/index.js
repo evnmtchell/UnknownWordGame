@@ -27,6 +27,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "https://dinkdaddy.org"
 
 const ALLOWED_ORIGINS = [
   "https://dinkdaddy.org",
+  "https://www.dinkdaddy.org",
   "https://unknown-word-game.pages.dev",
   "https://lexicon.plantos.co",
   "http://localhost:3000",
@@ -38,8 +39,12 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true)
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
-    // Allow Apple/Google OAuth callbacks
     if (origin === "https://appleid.apple.com") return callback(null, true)
+    // Allow Cloudflare Pages preview deployments
+    if (origin.endsWith(".pages.dev")) return callback(null, true)
+    // Allow any subdomain of dinkdaddy.org
+    if (origin.endsWith(".dinkdaddy.org")) return callback(null, true)
+    console.warn("[CORS] Blocked origin:", origin)
     callback(new Error("Not allowed by CORS"))
   },
   credentials: true,
