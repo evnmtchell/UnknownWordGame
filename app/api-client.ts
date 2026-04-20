@@ -1,6 +1,7 @@
 const API_BASE = "https://api-lexicon.plantos.co"
 const TOKEN_KEY = "lexicon-auth-token"
 const USER_KEY = "lexicon-auth-user"
+const DEVICE_ID_KEY = "lexicon-device-id"
 
 type AuthState = {
   token: string
@@ -35,12 +36,26 @@ function clearAuth() {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+function getDeviceId(): string {
+  let id = localStorage.getItem(DEVICE_ID_KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem(DEVICE_ID_KEY, id)
+  }
+  return id
+}
+
 async function ensureAuth(): Promise<AuthState> {
   const existing = getStoredAuth()
   if (existing) return existing
 
-  // Get anonymous token
-  const res = await fetch(`${API_BASE}/auth/token`)
+  // Get anonymous token — only called when user needs to save data
+  const deviceId = getDeviceId()
+  const res = await fetch(`${API_BASE}/auth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ device_id: deviceId }),
+  })
   if (!res.ok) throw new Error("Failed to get auth token")
   const data = await res.json()
   const auth: AuthState = {
@@ -51,6 +66,15 @@ async function ensureAuth(): Promise<AuthState> {
   }
   storeAuth(auth)
   return auth
+}
+
+export function trackVisit() {
+  const deviceId = getDeviceId()
+  fetch(`${API_BASE}/visit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ device_id: deviceId }),
+  }).catch(() => {})
 }
 
 async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
@@ -172,6 +196,13 @@ export function handleOAuthCallback(): AuthState | null {
   if (token && username && userId) {
     const auth: AuthState = { token, user_id: userId, username, anon: false }
     storeAuth(auth)
+    // Link device to authenticated user
+    const deviceId = getDeviceId()
+    fetch(`${API_BASE}/visit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: deviceId, user_id: userId }),
+    }).catch(() => {})
     // Clean URL
     window.history.replaceState({}, "", window.location.pathname)
     return auth

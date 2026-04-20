@@ -5,7 +5,7 @@ import { VALID_WORDS } from "./words"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
-import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink } from "./api-client"
+import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink, trackVisit } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -541,6 +541,8 @@ export default function Home() {
 
   useEffect(() => {
     setHasMounted(true)
+    // Track unique visitors
+    trackVisit()
     // Track share link clicks
     storeArrivedFromRef()
     // Handle OAuth redirect callback (Google/Apple)

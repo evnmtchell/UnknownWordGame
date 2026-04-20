@@ -161,18 +161,75 @@ async function mergeAnonymousData(anonUserId, realUserId) {
 // AUTH ROUTES (no auth required)
 // ==========================================
 
-// GET /auth/token — issue anonymous JWT
-app.get("/auth/token", async (_req, res) => {
+// POST /auth/token — issue anonymous JWT (only when user needs to save data)
+app.post("/auth/token", async (req, res) => {
+  const { device_id } = req.body || {}
   try {
+    // Check if this device already has a user
+    if (device_id) {
+      const { rows: existing } = await pool.query(
+        "SELECT user_id FROM devices WHERE device_id = $1 AND user_id IS NOT NULL",
+        [device_id]
+      )
+      if (existing.length > 0) {
+        // Reuse existing anon user for this device
+        const { rows: userRows } = await pool.query(
+          "SELECT * FROM users WHERE id = $1",
+          [existing[0].user_id]
+        )
+        if (userRows.length > 0) {
+          const user = userRows[0]
+          const token = signToken({ ...user, anon: !user.password_hash })
+          return res.json({ token, user_id: user.id, username: user.username, anon: !user.password_hash })
+        }
+      }
+    }
+
+    // Create new anon user
     const { rows } = await pool.query(
       `INSERT INTO users (username) VALUES ($1) RETURNING *`,
       [`anon-${crypto.randomUUID().slice(0, 8)}`]
     )
     const user = rows[0]
+
+    // Link device to user
+    if (device_id) {
+      await pool.query(
+        `INSERT INTO devices (device_id, user_id) VALUES ($1, $2)
+         ON CONFLICT (device_id) DO UPDATE SET user_id = $2, last_seen = now()`,
+        [device_id, user.id]
+      )
+    }
+
     const token = signToken({ ...user, anon: true })
     res.json({ token, user_id: user.id, username: user.username, anon: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /visit — track page visit without creating a user
+app.post("/visit", async (req, res) => {
+  const { device_id, user_id } = req.body || {}
+  if (!device_id) return res.json({ ok: true })
+
+  try {
+    if (user_id) {
+      await pool.query(
+        `INSERT INTO devices (device_id, user_id) VALUES ($1, $2)
+         ON CONFLICT (device_id) DO UPDATE SET last_seen = now(), visit_count = devices.visit_count + 1, user_id = COALESCE($2, devices.user_id)`,
+        [device_id, user_id]
+      )
+    } else {
+      await pool.query(
+        `INSERT INTO devices (device_id) VALUES ($1)
+         ON CONFLICT (device_id) DO UPDATE SET last_seen = now(), visit_count = devices.visit_count + 1`,
+        [device_id]
+      )
+    }
+    res.json({ ok: true })
+  } catch {
+    res.json({ ok: true })
   }
 })
 
