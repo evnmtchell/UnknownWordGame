@@ -302,6 +302,24 @@ type MiniTransform = {
   transpose?: boolean
 }
 
+type EasyTemplateSlot = Omit<EasySlot, "word"> & {
+  length: number
+}
+
+type MiniTemplateSlot = Omit<MiniSlot, "word"> & {
+  length: number
+}
+
+type EasyLayoutTemplate = {
+  slots: EasyTemplateSlot[]
+  fills: string[][]
+}
+
+type MiniLayoutTemplate = {
+  slots: MiniTemplateSlot[]
+  fills: string[][]
+}
+
 const miniModeBonusCells: BonusCell[] = [
   { row: 0, col: 0, type: "TW" },
   { row: 0, col: 4, type: "TW" },
@@ -318,57 +336,47 @@ const miniModeBonusCells: BonusCell[] = [
   { row: 4, col: 2, type: "DL" },
 ]
 
-const miniModeBlueprints: MiniSlot[][] = [
-  [
-    { direction: "across", row: 2, col: 0, word: "PLANE" },
-    { direction: "down", row: 0, col: 1, word: "ISLE" },
-    { direction: "down", row: 1, col: 3, word: "ANT" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "CLOUD" },
-    { direction: "down", row: 0, col: 1, word: "ISLE" },
-    { direction: "down", row: 1, col: 3, word: "MUG" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "SMILE" },
-    { direction: "down", row: 0, col: 0, word: "GAS" },
-    { direction: "down", row: 1, col: 2, word: "PIN" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "WATER" },
-    { direction: "down", row: 0, col: 2, word: "ACTOR" },
-    { direction: "down", row: 1, col: 4, word: "ORB" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "GLOVE" },
-    { direction: "down", row: 0, col: 1, word: "ISLE" },
-    { direction: "down", row: 1, col: 3, word: "IVY" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "FABLE" },
-    { direction: "down", row: 0, col: 2, word: "CAB" },
-    { direction: "down", row: 1, col: 4, word: "PEA" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "BREAD" },
-    { direction: "down", row: 0, col: 1, word: "AURA" },
-    { direction: "down", row: 1, col: 3, word: "MAP" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "STONE" },
-    { direction: "down", row: 0, col: 1, word: "MATH" },
-    { direction: "down", row: 1, col: 3, word: "ANT" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "HOUSE" },
-    { direction: "down", row: 0, col: 1, word: "AEON" },
-    { direction: "down", row: 1, col: 3, word: "ASH" },
-  ],
-  [
-    { direction: "across", row: 2, col: 0, word: "RIVER" },
-    { direction: "down", row: 0, col: 1, word: "GRID" },
-    { direction: "down", row: 1, col: 3, word: "PEA" },
-  ],
+const miniModeTemplates: MiniLayoutTemplate[] = [
+  {
+    slots: [
+      { direction: "across", row: 2, col: 0, length: 5 },
+      { direction: "down", row: 0, col: 1, length: 4 },
+      { direction: "down", row: 1, col: 3, length: 3 },
+    ],
+    fills: [
+      ["PLANE", "ISLE", "ANT"],
+      ["CLOUD", "ISLE", "MUG"],
+      ["GLOVE", "ISLE", "IVY"],
+      ["BREAD", "AURA", "MAP"],
+      ["STONE", "MATH", "ANT"],
+      ["HOUSE", "IRON", "ASH"],
+      ["RIVER", "GRID", "PEA"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 2, col: 0, length: 5 },
+      { direction: "down", row: 0, col: 2, length: 5 },
+      { direction: "down", row: 1, col: 4, length: 3 },
+    ],
+    fills: [["WATER", "ACTOR", "ORB"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 2, col: 0, length: 5 },
+      { direction: "down", row: 0, col: 2, length: 3 },
+      { direction: "down", row: 1, col: 4, length: 3 },
+    ],
+    fills: [["FABLE", "CAB", "PEA"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 2, col: 0, length: 5 },
+      { direction: "down", row: 0, col: 0, length: 3 },
+      { direction: "down", row: 1, col: 2, length: 3 },
+    ],
+    fills: [["SMILE", "GAS", "PIN"]],
+  },
 ]
 
 const miniModeTransforms: MiniTransform[] = [{}, { transpose: true }]
@@ -405,165 +413,154 @@ const hardModeTransforms: HardTransform[] = [
   { transpose: true },
 ]
 
-const easyModeBlueprints: EasySlot[][] = [
-  [
-    { direction: "across", row: 3, col: 1, word: "PLANE" },
-    { direction: "down", row: 1, col: 2, word: "AXLE" },
-    { direction: "down", row: 2, col: 4, word: "ANT" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "CLOUD" },
-    { direction: "down", row: 1, col: 2, word: "ISLE" },
-    { direction: "down", row: 2, col: 4, word: "MUG" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "MARKET" },
-    { direction: "down", row: 1, col: 1, word: "BEAM" },
-    { direction: "down", row: 2, col: 4, word: "GEM" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "SPRING" },
-    { direction: "down", row: 2, col: 2, word: "ARC" },
-    { direction: "down", row: 2, col: 4, word: "ONE" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "BUTTON" },
-    { direction: "down", row: 2, col: 3, word: "ATE" },
-    { direction: "down", row: 2, col: 5, word: "SOD" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "FABLE" },
-    { direction: "down", row: 2, col: 2, word: "MAP" },
-    { direction: "down", row: 2, col: 4, word: "ELM" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "HARVEST" },
-    { direction: "down", row: 1, col: 1, word: "BEACH" },
-    { direction: "down", row: 1, col: 5, word: "MIST" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "BALANCE" },
-    { direction: "down", row: 1, col: 1, word: "BEACH" },
-    { direction: "down", row: 2, col: 4, word: "INK" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "SMILE" },
-    { direction: "down", row: 1, col: 1, word: "MUSIC" },
-    { direction: "down", row: 2, col: 4, word: "ELM" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "GLOVE" },
-    { direction: "down", row: 1, col: 3, word: "BROOK" },
-    { direction: "down", row: 2, col: 5, word: "HEN" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "BRICK" },
-    { direction: "down", row: 1, col: 2, word: "THREE" },
-    { direction: "down", row: 2, col: 4, word: "ACE" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "WATER" },
-    { direction: "down", row: 1, col: 3, word: "METAL" },
-    { direction: "down", row: 2, col: 5, word: "ART" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "SHORE" },
-    { direction: "down", row: 1, col: 2, word: "ECHO" },
-    { direction: "down", row: 2, col: 4, word: "ARM" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "GRAIN" },
-    { direction: "down", row: 1, col: 2, word: "BARK" },
-    { direction: "down", row: 2, col: 4, word: "AID" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "MOUSE" },
-    { direction: "down", row: 1, col: 2, word: "AEON" },
-    { direction: "down", row: 2, col: 4, word: "ASK" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "BRICK" },
-    { direction: "down", row: 1, col: 2, word: "ACRE" },
-    { direction: "down", row: 2, col: 4, word: "ACE" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "CLOVE" },
-    { direction: "down", row: 1, col: 2, word: "ISLE" },
-    { direction: "down", row: 2, col: 4, word: "EVE" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "TIGER" },
-    { direction: "down", row: 1, col: 2, word: "PAIN" },
-    { direction: "down", row: 2, col: 4, word: "PEA" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "ROAST" },
-    { direction: "down", row: 1, col: 2, word: "AEON" },
-    { direction: "down", row: 2, col: 4, word: "ASH" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "QUILT" },
-    { direction: "down", row: 1, col: 2, word: "SOUP" },
-    { direction: "down", row: 2, col: 4, word: "ELM" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "POCKET" },
-    { direction: "down", row: 1, col: 1, word: "AEON" },
-    { direction: "down", row: 2, col: 4, word: "TEN" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "THRIVE" },
-    { direction: "down", row: 1, col: 1, word: "ECHO" },
-    { direction: "down", row: 2, col: 4, word: "EVE" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "CANDLE" },
-    { direction: "down", row: 1, col: 1, word: "BEAM" },
-    { direction: "down", row: 2, col: 4, word: "ELM" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "SPRING" },
-    { direction: "down", row: 1, col: 1, word: "HOPE" },
-    { direction: "down", row: 2, col: 4, word: "ANT" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "HARBOR" },
-    { direction: "down", row: 1, col: 1, word: "BEAM" },
-    { direction: "down", row: 2, col: 4, word: "SON" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "THREAD" },
-    { direction: "down", row: 1, col: 3, word: "BLESS" },
-  ],
-  [
-    { direction: "across", row: 3, col: 1, word: "CLOUD" },
-    { direction: "down", row: 1, col: 3, word: "BROTH" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "PLANETS" },
-    { direction: "down", row: 1, col: 1, word: "HELLO" },
-    { direction: "down", row: 1, col: 3, word: "ANNEX" },
-    { direction: "down", row: 1, col: 5, word: "METAL" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "MARKETS" },
-    { direction: "down", row: 1, col: 0, word: "COMET" },
-    { direction: "down", row: 1, col: 2, word: "SHRED" },
-    { direction: "down", row: 1, col: 4, word: "BLESS" },
-    { direction: "down", row: 1, col: 6, word: "MUSIC" },
-  ],
-  [
-    { direction: "across", row: 3, col: 0, word: "POCKETS" },
-    { direction: "down", row: 1, col: 1, word: "BROOK" },
-    { direction: "down", row: 1, col: 3, word: "TOKEN" },
-    { direction: "down", row: 1, col: 5, word: "METAL" },
-  ],
+const easyModeTemplates: EasyLayoutTemplate[] = [
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 2, length: 4 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [
+      ["PLANE", "AXLE", "ANT"],
+      ["CLOUD", "ISLE", "MUG"],
+      ["SHORE", "ECHO", "ARM"],
+      ["GRAIN", "BARK", "AID"],
+      ["MOUSE", "GLOW", "ASK"],
+      ["BRICK", "ACRE", "ACE"],
+      ["CLOVE", "ISLE", "EVE"],
+      ["TIGER", "PAIN", "PEA"],
+      ["ROAST", "CROW", "ASH"],
+      ["QUILT", "SOUP", "ELM"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 2, col: 2, length: 3 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [["FABLE", "MAP", "ELM"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 2, length: 5 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [["BRICK", "THREE", "ACE"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 3, length: 5 },
+      { direction: "down", row: 2, col: 5, length: 3 },
+    ],
+    fills: [
+      ["GLOVE", "BROOK", "HEN"],
+      ["WATER", "METAL", "ART"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 1, length: 5 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [["SMILE", "MUSIC", "ELM"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 6 },
+      { direction: "down", row: 1, col: 1, length: 4 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [
+      ["MARKET", "BEAM", "GEM"],
+      ["SPRING", "HOPE", "ANT"],
+      ["POCKET", "FROG", "TEN"],
+      ["THRIVE", "ECHO", "EVE"],
+      ["CANDLE", "BEAM", "ELM"],
+      ["HARBOR", "BEAM", "SON"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 6 },
+      { direction: "down", row: 2, col: 3, length: 3 },
+      { direction: "down", row: 2, col: 5, length: 3 },
+    ],
+    fills: [["BUTTON", "ATE", "SOD"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 7 },
+      { direction: "down", row: 1, col: 1, length: 5 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [["BALANCE", "BEACH", "INK"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 7 },
+      { direction: "down", row: 1, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 5, length: 4 },
+    ],
+    fills: [["HARVEST", "BEACH", "MIST"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 6 },
+      { direction: "down", row: 1, col: 3, length: 5 },
+    ],
+    fills: [["THREAD", "BLESS"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 3, length: 5 },
+    ],
+    fills: [["CLOUD", "BROTH"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 7 },
+      { direction: "down", row: 1, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 3, length: 5 },
+      { direction: "down", row: 1, col: 5, length: 5 },
+    ],
+    fills: [
+      ["PLANETS", "HELLO", "ANNEX", "METAL"],
+      ["POCKETS", "BROOK", "TOKEN", "METAL"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 7 },
+      { direction: "down", row: 1, col: 0, length: 5 },
+      { direction: "down", row: 1, col: 2, length: 5 },
+      { direction: "down", row: 1, col: 4, length: 5 },
+      { direction: "down", row: 1, col: 6, length: 5 },
+    ],
+    fills: [["MARKETS", "COMET", "SHRED", "BLESS", "MUSIC"]],
+  },
 ]
 
 const easyModeTransforms: EasyTransform[] = [
   {},
   { transpose: true },
 ]
+
+const easyModeVariants = easyModeTransforms.flatMap((transform) =>
+  easyModeTemplates.flatMap((template) =>
+    template.fills.map((fill) => ({ template, fill, transform }))
+  )
+)
+
+const miniModeVariants = miniModeTransforms.flatMap((transform) =>
+  miniModeTemplates.flatMap((template) =>
+    template.fills.map((fill) => ({ template, fill, transform }))
+  )
+)
 
 function transposeHardSlot(slot: HardSlot): HardSlot {
   return {
@@ -622,6 +619,46 @@ function transformMiniSlot(slot: MiniSlot, transform: MiniTransform) {
   return transformed
 }
 
+function fillEasyTemplateSlots(slots: EasyTemplateSlot[], words: string[]): EasySlot[] {
+  if (slots.length !== words.length) {
+    throw new Error("Easy template fill count does not match slot count.")
+  }
+
+  return slots.map((slot, index) => {
+    const word = words[index]
+    if (word.length !== slot.length) {
+      throw new Error(`Easy template fill length mismatch for ${word}.`)
+    }
+
+    return {
+      direction: slot.direction,
+      row: slot.row,
+      col: slot.col,
+      word,
+    }
+  })
+}
+
+function fillMiniTemplateSlots(slots: MiniTemplateSlot[], words: string[]): MiniSlot[] {
+  if (slots.length !== words.length) {
+    throw new Error("Mini template fill count does not match slot count.")
+  }
+
+  return slots.map((slot, index) => {
+    const word = words[index]
+    if (word.length !== slot.length) {
+      throw new Error(`Mini template fill length mismatch for ${word}.`)
+    }
+
+    return {
+      direction: slot.direction,
+      row: slot.row,
+      col: slot.col,
+      word,
+    }
+  })
+}
+
 function buildHardLayout(slots: HardSlot[], transform: HardTransform = {}) {
   const cells = new Map<string, PuzzleCell>()
 
@@ -644,10 +681,16 @@ function buildHardLayout(slots: HardSlot[], transform: HardTransform = {}) {
   return Array.from(cells.values())
 }
 
-function buildEasyLayout(slots: EasySlot[], transform: EasyTransform = {}) {
+function buildEasyLayout(
+  template: EasyLayoutTemplate,
+  words: string[],
+  transform: EasyTransform = {}
+) {
   const cells = new Map<string, PuzzleCell>()
 
-  for (const slot of slots.map((item) => transformEasySlot(item, transform))) {
+  for (const slot of fillEasyTemplateSlots(template.slots, words).map((item) =>
+    transformEasySlot(item, transform)
+  )) {
     for (let index = 0; index < slot.word.length; index++) {
       const row = slot.direction === "across" ? slot.row : slot.row + index
       const col = slot.direction === "across" ? slot.col + index : slot.col
@@ -666,10 +709,16 @@ function buildEasyLayout(slots: EasySlot[], transform: EasyTransform = {}) {
   return Array.from(cells.values())
 }
 
-function buildMiniLayout(slots: MiniSlot[], transform: MiniTransform = {}) {
+function buildMiniLayout(
+  template: MiniLayoutTemplate,
+  words: string[],
+  transform: MiniTransform = {}
+) {
   const cells = new Map<string, PuzzleCell>()
 
-  for (const slot of slots.map((item) => transformMiniSlot(item, transform))) {
+  for (const slot of fillMiniTemplateSlots(template.slots, words).map((item) =>
+    transformMiniSlot(item, transform)
+  )) {
     for (let index = 0; index < slot.word.length; index++) {
       const row = slot.direction === "across" ? slot.row : slot.row + index
       const col = slot.direction === "across" ? slot.col + index : slot.col
@@ -707,13 +756,8 @@ function getGeneratedEasyLayoutForDate(date: string) {
   const start = Date.parse(`${FUTURE_EASY_REBUILD_START}T00:00:00Z`)
   const current = Date.parse(`${date}T00:00:00Z`)
   const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
-  const comboCount = easyModeBlueprints.length * easyModeTransforms.length
-  const comboIndex = dayOffset % comboCount
-  const blueprintIndex = Math.floor(comboIndex / easyModeTransforms.length)
-  const transformIndex = comboIndex % easyModeTransforms.length
-  const slotLayout = easyModeBlueprints[blueprintIndex]
-  const transform = easyModeTransforms[transformIndex]
-  const transformedLayout = buildEasyLayout(slotLayout, transform)
+  const variant = easyModeVariants[dayOffset % easyModeVariants.length]
+  const transformedLayout = buildEasyLayout(variant.template, variant.fill, variant.transform)
 
   for (const cell of transformedLayout) {
     if (cell.row < 0 || cell.row >= EASY_BOARD_SIZE || cell.col < 0 || cell.col >= EASY_BOARD_SIZE) {
@@ -728,13 +772,8 @@ function getMiniModeLayoutForDate(date: string) {
   const start = Date.parse(`${MINI_MODE_REBUILD_START}T00:00:00Z`)
   const current = Date.parse(`${date}T00:00:00Z`)
   const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
-  const comboCount = miniModeBlueprints.length * miniModeTransforms.length
-  const comboIndex = dayOffset % comboCount
-  const blueprintIndex = Math.floor(comboIndex / miniModeTransforms.length)
-  const transformIndex = comboIndex % miniModeTransforms.length
-  const slotLayout = miniModeBlueprints[blueprintIndex]
-  const transform = miniModeTransforms[transformIndex]
-  const transformedLayout = buildMiniLayout(slotLayout, transform)
+  const variant = miniModeVariants[dayOffset % miniModeVariants.length]
+  const transformedLayout = buildMiniLayout(variant.template, variant.fill, variant.transform)
 
   for (const cell of transformedLayout) {
     if (cell.row < 0 || cell.row >= MINI_BOARD_SIZE || cell.col < 0 || cell.col >= MINI_BOARD_SIZE) {
@@ -773,49 +812,53 @@ function validateHardBlueprints() {
 }
 
 function validateEasyBlueprints() {
-  for (const [blueprintIndex, blueprint] of easyModeBlueprints.entries()) {
-    for (const [transformIndex, transform] of easyModeTransforms.entries()) {
-      validatePuzzleLayout(
-        {
-          id: `easy-blueprint-${blueprintIndex + 1}-transform-${transformIndex + 1}`,
-          date: "0000-00-00",
-          boardSize: EASY_BOARD_SIZE,
-          rack: [],
-          filledCells: buildEasyLayout(blueprint, transform),
-          bonusCells: defaultBonusCells,
-          optimalScore: 0,
-          optimalWords: [],
-        },
-        {
-          minWords: 2,
-          maxWords: 5,
-        }
-      )
+  for (const [templateIndex, template] of easyModeTemplates.entries()) {
+    for (const [fillIndex, fill] of template.fills.entries()) {
+      for (const [transformIndex, transform] of easyModeTransforms.entries()) {
+        validatePuzzleLayout(
+          {
+            id: `easy-template-${templateIndex + 1}-fill-${fillIndex + 1}-transform-${transformIndex + 1}`,
+            date: "0000-00-00",
+            boardSize: EASY_BOARD_SIZE,
+            rack: [],
+            filledCells: buildEasyLayout(template, fill, transform),
+            bonusCells: defaultBonusCells,
+            optimalScore: 0,
+            optimalWords: [],
+          },
+          {
+            minWords: 2,
+            maxWords: 5,
+          }
+        )
+      }
     }
   }
 }
 
 function validateMiniBlueprints() {
-  for (const [blueprintIndex, blueprint] of miniModeBlueprints.entries()) {
-    for (const [transformIndex, transform] of miniModeTransforms.entries()) {
-      validatePuzzleLayout(
-        {
-          id: `mini-blueprint-${blueprintIndex + 1}-transform-${transformIndex + 1}`,
-          date: "0000-00-00",
-          boardSize: MINI_BOARD_SIZE,
-          rack: [],
-          filledCells: buildMiniLayout(blueprint, transform),
-          bonusCells: miniModeBonusCells,
-          optimalScore: 0,
-          optimalWords: [],
-        },
-        {
-          minWords: 2,
-          maxWords: 3,
-          minLength: 3,
-          maxLength: 5,
-        }
-      )
+  for (const [templateIndex, template] of miniModeTemplates.entries()) {
+    for (const [fillIndex, fill] of template.fills.entries()) {
+      for (const [transformIndex, transform] of miniModeTransforms.entries()) {
+        validatePuzzleLayout(
+          {
+            id: `mini-template-${templateIndex + 1}-fill-${fillIndex + 1}-transform-${transformIndex + 1}`,
+            date: "0000-00-00",
+            boardSize: MINI_BOARD_SIZE,
+            rack: [],
+            filledCells: buildMiniLayout(template, fill, transform),
+            bonusCells: miniModeBonusCells,
+            optimalScore: 0,
+            optimalWords: [],
+          },
+          {
+            minWords: 2,
+            maxWords: 3,
+            minLength: 3,
+            maxLength: 5,
+          }
+        )
+      }
     }
   }
 }
@@ -1469,7 +1512,36 @@ const baseDailyPuzzles: DailyPuzzle[] = [
   },
 ]
 
-export const DAILY_PUZZLES: DailyPuzzle[] = baseDailyPuzzles.map((puzzle, index) => {
+function generateFutureBasePuzzles(startDate: string, endDate: string, startingId: number): DailyPuzzle[] {
+  const start = new Date(`${startDate}T00:00:00Z`)
+  const end = new Date(`${endDate}T00:00:00Z`)
+  const generated: DailyPuzzle[] = []
+  let nextId = startingId
+
+  for (let current = new Date(start); current <= end; current.setUTCDate(current.getUTCDate() + 1)) {
+    const date = current.toISOString().slice(0, 10)
+    generated.push({
+      id: `puzzle-${nextId}`,
+      date,
+      boardSize: EASY_BOARD_SIZE,
+      rack: ["S", "T", "R", "E", "A", "I", "N"],
+      filledCells: [],
+      bonusCells: defaultBonusCells,
+      optimalScore: 0,
+      optimalWords: [],
+    })
+    nextId += 1
+  }
+
+  return generated
+}
+
+const datedBaseDailyPuzzles: DailyPuzzle[] = [
+  ...baseDailyPuzzles,
+  ...generateFutureBasePuzzles("2026-05-08", "2026-05-31", 37),
+]
+
+export const DAILY_PUZZLES: DailyPuzzle[] = datedBaseDailyPuzzles.map((puzzle, index) => {
   if (puzzle.date >= FUTURE_EASY_REBUILD_START) {
     return {
       ...puzzle,
@@ -1493,6 +1565,11 @@ export const DAILY_PUZZLES: DailyPuzzle[] = baseDailyPuzzles.map((puzzle, index)
 })
 
 for (const puzzle of DAILY_PUZZLES) {
+  if (puzzle.date >= FUTURE_EASY_REBUILD_START) {
+    validatePuzzleLayout(puzzle, { minWords: 2, maxWords: 5 })
+    continue
+  }
+
   validatePuzzleLayout(puzzle)
 }
 

@@ -471,30 +471,6 @@ export default function Home() {
           )
         )
       : null
-  const homeCardHorizontalPadding = isCompactMobile ? (isSmallPhone ? 14 : isLargePhone ? 18 : 16) : 28
-  const homeBrandTileGap = isCompactMobile ? (isSmallPhone ? 2 : 3) : 4
-  const homeBrandTileSize =
-    isCompactMobile && compactViewportWidth > 0
-      ? Math.max(
-          isSmallPhone ? 34 : isLargePhone ? 40 : 37,
-          Math.min(
-            isLargePhone ? 42 : 38,
-            Math.floor((compactViewportWidth - homeCardHorizontalPadding * 2 - homeBrandTileGap * 6) / 7)
-          )
-        )
-      : 56
-  const homeBrandLetterSize = isCompactMobile
-    ? isSmallPhone
-      ? "20px"
-      : isLargePhone
-        ? "24px"
-        : "22px"
-    : "34px"
-  const homeBrandScoreSize = isCompactMobile
-    ? isSmallPhone
-      ? "8px"
-      : "9px"
-    : "11px"
   const compactModalInset = isCompactMobile ? (isSmallPhone ? 12 : isLargePhone ? 20 : 16) : 24
   const compactModalPadding = isCompactMobile ? (isSmallPhone ? "14px" : isLargePhone ? "18px" : "16px") : "20px"
   const boardTileFontSize = isCompactMobile
@@ -3214,77 +3190,28 @@ export default function Home() {
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
-              gap: isCompactMobile ? (isSmallPhone ? "12px" : isLargePhone ? "18px" : "16px") : "22px",
-              maxWidth: "760px",
+              gap: isCompactMobile ? (isSmallPhone ? "22px" : "28px") : "34px",
+              maxWidth: "900px",
               margin: "0 auto",
+              paddingBottom: isCompactMobile ? "24px" : "40px",
             }}
           >
             <div
               style={{
-                padding: isCompactMobile
-                  ? `${isSmallPhone ? "16px" : isLargePhone ? "20px" : "18px"} ${homeCardHorizontalPadding}px`
-                  : "28px 28px 24px",
-                borderRadius: isCompactMobile ? "24px" : "28px",
-                background:
-                  "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
-                border: "1px solid rgba(123, 98, 65, 0.14)",
-                boxShadow: "0 18px 36px rgba(78, 56, 28, 0.08)",
+                padding: isCompactMobile ? "0 8px" : "0 24px",
+                textAlign: "center",
               }}
             >
               <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  flexWrap: "wrap",
-                  marginBottom: isCompactMobile ? "6px" : "10px",
-                }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: isCompactMobile ? "11px" : "12px",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.18em",
-                    color: "#8a6a42",
-                    fontWeight: 800,
-                  }}
-                >
-                  Daily Puzzle
-                </p>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    gap: isCompactMobile ? "8px" : "10px",
-                    flexWrap: "wrap",
-                    marginLeft: "auto",
-                    fontSize: isCompactMobile ? (isSmallPhone ? "11px" : "12px") : "13px",
-                    color: "#8a6a42",
-                    fontWeight: 700,
-                  }}
-                >
-                  <span style={{ letterSpacing: "0.03em" }}>{todayDisplayDate}</span>
-                  <span style={{ opacity: 0.45 }}>•</span>
-                  <span style={{ opacity: 0.72, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    Next
-                  </span>
-                  <span style={{ color: "#2f2419", fontWeight: 800 }}>
-                    {hasMounted ? resetCountdown : "--:--:--"}
-                  </span>
-                </div>
-              </div>
-              <div
                 aria-label="Lexicon"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                  display: "flex",
+                  justifyContent: "center",
                   alignItems: "center",
-                  justifyItems: "center",
-                  gap: `${homeBrandTileGap}px`,
-                  margin: isCompactMobile ? "0 0 8px" : "0 0 12px",
+                  flexWrap: "nowrap",
+                  gap: isCompactMobile ? "10px" : "14px",
+                  margin: isCompactMobile ? "0 auto 18px" : "0 auto 26px",
+                  maxWidth: "100%",
                 }}
               >
                 {homeBrandRack.map((letter, index) => (
@@ -3315,24 +3242,31 @@ export default function Home() {
                       }}
                       onTouchStart={(e) => handleHomeBrandTouchStart(e, index)}
                       style={{
-                        width: `${homeBrandTileSize}px`,
-                        height: `${homeBrandTileSize}px`,
-                        borderRadius: isCompactMobile ? "10px" : "14px",
-                        border: "2px solid rgba(135,106,63,0.9)",
+                        width: isCompactMobile
+                          ? (isSmallPhone ? "38px" : isLargePhone ? "46px" : "42px")
+                          : "108px",
+                        height: isCompactMobile
+                          ? (isSmallPhone ? "38px" : isLargePhone ? "46px" : "42px")
+                          : "108px",
+                        borderRadius: isCompactMobile ? "12px" : "22px",
+                        border: "1px solid rgba(173, 143, 96, 0.42)",
                         background:
-                          "linear-gradient(180deg, rgba(242,223,176,0.98) 0%, rgba(232,206,143,0.98) 100%)",
-                        boxShadow: "0 8px 14px rgba(98, 74, 34, 0.12)",
+                          "linear-gradient(180deg, rgba(247,236,216,0.98) 0%, rgba(243,229,206,0.98) 100%)",
+                        boxShadow:
+                          "inset 0 1px 0 rgba(255,255,255,0.72), 0 12px 22px rgba(98, 74, 34, 0.1), 0 2px 6px rgba(98, 74, 34, 0.06)",
                         display: "grid",
                         placeItems: "center",
-                        fontSize: homeBrandLetterSize,
+                        fontSize: isCompactMobile
+                          ? (isSmallPhone ? "21px" : isLargePhone ? "27px" : "24px")
+                          : "54px",
                         fontWeight: 800,
-                        color: "#332616",
+                        color: "#14110f",
                         position: "relative",
                         cursor: "grab",
                         transform:
                           homeBrandDraggedIndex === index
-                            ? "scale(0.96) rotate(-2deg)"
-                            : "rotate(0deg)",
+                            ? `scale(0.96) rotate(${[-4, 3, -2, 2, -3, 2, -2][index]}deg)`
+                            : `rotate(${[-4, 3, -2, 2, -3, 2, -2][index]}deg)`,
                         opacity: homeBrandDraggedIndex === index ? 0.75 : 1,
                         flexShrink: 0,
                         userSelect: "none",
@@ -3342,12 +3276,11 @@ export default function Home() {
                       <span
                         style={{
                           position: "absolute",
-                          right: isCompactMobile ? "5px" : "7px",
-                          bottom: isCompactMobile ? "4px" : "6px",
-                          fontSize: homeBrandScoreSize,
+                          right: isCompactMobile ? "5px" : "10px",
+                          bottom: isCompactMobile ? "2px" : "6px",
+                          fontSize: isCompactMobile ? "9px" : "18px",
                           fontWeight: 700,
-                          color: "#6d5430",
-                          opacity: 0.85,
+                          color: "rgba(47, 36, 25, 0.45)",
                         }}
                       >
                         {LETTER_SCORES[letter] ?? 0}
@@ -3370,23 +3303,39 @@ export default function Home() {
               <p
                 style={{
                   margin: 0,
-                  fontSize: isCompactMobile ? (isSmallPhone ? "13px" : "14px") : "17px",
-                  color: "#5b4630",
-                  maxWidth: "40ch",
-                  lineHeight: 1.45,
+                  marginTop: isCompactMobile ? "2px" : "6px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "17px" : "18px") : "32px",
+                  color: "#1a1714",
+                  maxWidth: isCompactMobile ? "18ch" : "none",
+                  lineHeight: 1.15,
                   textAlign: "center",
                   marginInline: "auto",
+                  fontWeight: 600,
                 }}
               >
-                A lexicon is the vocabulary of a language, speaker, or subject.
+                Build the strongest play
               </p>
+              <div
+                style={{
+                  marginTop: isCompactMobile ? "6px" : "10px",
+                  fontSize: isCompactMobile ? "12px" : "14px",
+                  color: "#8a6a42",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {todayDisplayDate} · Next {hasMounted ? resetCountdown : "--:--:--"}
+              </div>
             </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: isCompactMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                   gap: isCompactMobile ? (isSmallPhone ? "10px" : "12px") : "12px",
+                  maxWidth: "760px",
+                  margin: "0 auto",
                 }}
               >
               <button
@@ -3590,7 +3539,7 @@ export default function Home() {
               >
                 {([
                   { key: "mini", label: "Mini" },
-                  { key: "easy", label: "Easy" },
+                  { key: "easy", label: "Classic" },
                 ] as const).map((mode) => {
                   const isSelected = selectedMode === mode.key
                   return (
@@ -3666,7 +3615,7 @@ export default function Home() {
                 <br />
                 {selectedMode === "mini"
                   ? "Mini gives you a quicker 5x5 board."
-                  : "Easy keeps the classic 7x7 board."}
+                  : "Classic keeps the 7x7 board."}
               </div>
 
               {(!currentUser || currentUser.anon) ? (
@@ -3841,7 +3790,7 @@ export default function Home() {
                   fontWeight: 800,
                 }}
               >
-                {loadedGameConfig.mode === "mini" ? "Mini" : "Easy"}
+                {loadedGameConfig.mode === "mini" ? "Mini" : "Classic"}
               </span>
             </div>
             <button
@@ -3881,7 +3830,7 @@ export default function Home() {
               }}
             >
               <strong>{formatDisplayDate(puzzle.date)}</strong> ·{" "}
-              <strong>{loadedGameConfig.mode === "mini" ? "Mini" : "Easy"}</strong>
+              <strong>{loadedGameConfig.mode === "mini" ? "Mini" : "Classic"}</strong>
             </div>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -4671,7 +4620,11 @@ export default function Home() {
                       boxSizing: "border-box",
                       transition: "transform 160ms ease, box-shadow 160ms ease",
                       boxShadow: hasLetter
-                        ? "inset 0 1px 0 rgba(255,255,255,0.42), 0 5px 12px rgba(53, 39, 19, 0.16), 0 1px 2px rgba(53, 39, 19, 0.08)"
+                        ? draggedPlacedTile &&
+                          draggedPlacedTile.row === row &&
+                          draggedPlacedTile.col === col
+                          ? "inset 0 1px 0 rgba(255,255,255,0.48), 0 18px 30px rgba(53, 39, 19, 0.24), 0 8px 16px rgba(53, 39, 19, 0.16)"
+                          : "inset 0 1px 0 rgba(255,255,255,0.42), 0 5px 12px rgba(53, 39, 19, 0.16), 0 1px 2px rgba(53, 39, 19, 0.08)"
                         : "inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 4px rgba(53, 39, 19, 0.04)",
                       touchAction: "none",
                       WebkitUserSelect: "none",
@@ -4688,6 +4641,12 @@ export default function Home() {
                         draggedPlacedTile.col === col
                           ? 0.78
                           : 1,
+                      transform:
+                        draggedPlacedTile &&
+                        draggedPlacedTile.row === row &&
+                        draggedPlacedTile.col === col
+                          ? "scale(1.04)"
+                          : "scale(1)",
                     }}
                   >
                     {(validWordOutline.top ||
