@@ -4581,7 +4581,9 @@ export default function Home() {
                 borderRadius: isCompactMobile ? "16px" : "22px",
                 border: "1px solid rgba(255,255,255,0.34)",
                 boxShadow:
-                  "inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -18px 28px rgba(61, 89, 118, 0.08), 0 18px 36px var(--board-shell-shadow), 0 4px 10px rgba(37, 56, 78, 0.08)",
+                  isCompactMobile
+                    ? "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -10px 18px rgba(61, 89, 118, 0.05), 0 10px 20px rgba(56, 78, 102, 0.16), 0 2px 6px rgba(37, 56, 78, 0.06)"
+                    : "inset 0 1px 0 rgba(255,255,255,0.32), inset 0 -14px 24px rgba(61, 89, 118, 0.06), 0 14px 28px rgba(56, 78, 102, 0.14), 0 4px 10px rgba(37, 56, 78, 0.06)",
                 width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
                 maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
                 overflowX: isCompactMobile ? "hidden" : "auto",
@@ -4892,8 +4894,8 @@ export default function Home() {
                           fontSize: isCompactMobile ? "13px" : "14px",
                           fontWeight: 900,
                           boxShadow: isLiveScorePreviewValid
-                            ? "0 8px 16px rgba(71, 117, 20, 0.28)"
-                            : "0 8px 16px rgba(136, 82, 16, 0.24)",
+                            ? "0 5px 10px rgba(71, 117, 20, 0.18)"
+                            : "0 5px 10px rgba(136, 82, 16, 0.16)",
                           border: "2px solid rgba(255,255,255,0.72)",
                           zIndex: 4,
                         }}
