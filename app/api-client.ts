@@ -356,3 +356,34 @@ export async function createShareLink(puzzleDate: string, puzzleMode: string, be
     return null
   }
 }
+
+export async function loadWordDefinition(word: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`)
+    if (!res.ok) return null
+
+    const data = await res.json() as Array<{
+      meanings?: Array<{
+        definitions?: Array<{
+          definition?: string
+        }>
+      }>
+    }>
+    if (!Array.isArray(data) || data.length === 0) return null
+
+    for (const entry of data) {
+      const meanings = Array.isArray(entry?.meanings) ? entry.meanings : []
+      for (const meaning of meanings) {
+        const definitions = Array.isArray(meaning?.definitions) ? meaning.definitions : []
+        const firstDefinition = definitions.find((definition) => typeof definition?.definition === "string" && definition.definition.trim().length > 0)
+        if (firstDefinition?.definition) {
+          return firstDefinition.definition.trim()
+        }
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}

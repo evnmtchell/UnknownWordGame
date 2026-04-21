@@ -5,7 +5,7 @@ import { VALID_WORDS } from "./words"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
-import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink, trackVisit } from "./api-client"
+import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, loadWordDefinition, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink, trackVisit } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -179,8 +179,8 @@ function getBoardCellKey(row: number, col: number) {
   return `${row}-${col}`
 }
 
-function getLocalDateString() {
-  return new Intl.DateTimeFormat("en-CA").format(new Date())
+function getLocalDateString(date: Date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA").format(date)
 }
 
 function formatDisplayDate(date: string) {
@@ -287,7 +287,7 @@ function createUiFeedbackSound(ctx: AudioContext, kind: UiFeedbackKind) {
 }
 
 export default function Home() {
-  const todayDate = useMemo(() => getLocalDateString(), [])
+  const [todayDate, setTodayDate] = useState(() => getLocalDateString())
   const todayDisplayDate = useMemo(() => formatDisplayDate(todayDate), [todayDate])
   const [selectedDate, setSelectedDate] = useState(todayDate)
   const [selectedMode, setSelectedMode] = useState<"mini" | "easy">("easy")
@@ -333,31 +333,40 @@ export default function Home() {
     const words = (puzzleOptimal?.words?.length ? puzzleOptimal.words : puzzle.optimalWords?.length ? puzzle.optimalWords : []) as string[]
     return { bestScore: score || 0, bestWords: words, bestPlacement: [] }
   }, [puzzle, puzzleOptimal])
+  const primaryOptimalWord = solution.bestWords[0] ?? null
 
   const isCompactMobile =
     viewportSize.width > 0 &&
-    viewportSize.width <= 430 &&
+    viewportSize.width <= 480 &&
     viewportSize.height > 0 &&
-    viewportSize.height <= 950
+    viewportSize.height <= 960
+  const isSmallPhone = isCompactMobile && viewportSize.width <= 375
+  const isLargePhone = isCompactMobile && viewportSize.width >= 428
+  const isShortPhone = isCompactMobile && viewportSize.height <= 760
+  const isTallPhone = isCompactMobile && viewportSize.height >= 860
   const boardSize = puzzle.boardSize
   const maxAttempts = 3
   const startingRack = puzzle.rack
   const isDesktopHardMode = false
   const storageKey = `daily-word-game-${puzzle.date}-${loadedGameConfig.mode}`
-  const boardGap = isCompactMobile ? 3 : 4
-  const compactBoardShellPadding = isCompactMobile ? 6 : 14
+  const boardGap = isCompactMobile ? (isSmallPhone ? 2 : isLargePhone ? 4 : 3) : 4
+  const compactBoardShellPadding = isCompactMobile ? (isSmallPhone ? 5 : isLargePhone ? 8 : 6) : 14
   const desktopBoardShellPadding = isDesktopHardMode ? 10 : 14
-  const compactRackGapWidth = 2
+  const compactRackGapWidth = isSmallPhone ? 1 : isLargePhone ? 3 : 2
+  const compactOuterPadding = isCompactMobile ? (isSmallPhone ? 10 : isLargePhone ? 18 : 14) : 0
+  const compactScreenPadding = isCompactMobile
+    ? `${isSmallPhone ? "max(6px, env(safe-area-inset-top)) 6px max(8px, env(safe-area-inset-bottom))" : isLargePhone ? "max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom))" : "max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom))"}`
+    : "clamp(12px, 4vw, 32px)"
   const compactBoardAvailableWidth =
     isCompactMobile && viewportSize.width > 0
-      ? Math.max(240, viewportSize.width - 16 - compactBoardShellPadding * 2)
+      ? Math.max(236, viewportSize.width - compactOuterPadding - compactBoardShellPadding * 2)
       : 0
   const compactBoardCellSize =
     isCompactMobile && compactBoardAvailableWidth > 0
       ? Math.max(
-          34,
+          loadedGameConfig.mode === "mini" ? 42 : isSmallPhone ? 30 : 33,
           Math.min(
-            46,
+            loadedGameConfig.mode === "mini" ? (isTallPhone ? 56 : 52) : isTallPhone ? 46 : 43,
             Math.floor((compactBoardAvailableWidth - (boardSize - 1) * boardGap) / boardSize)
           )
         )
@@ -396,31 +405,79 @@ export default function Home() {
   const compactRackTileSize =
     isCompactMobile && viewportSize.width > 0
       ? Math.max(
-          32,
+          loadedGameConfig.mode === "mini" ? 34 : isSmallPhone ? 28 : isLargePhone ? 33 : 31,
           Math.min(
-            42,
+            loadedGameConfig.mode === "mini" ? 46 : isTallPhone ? (isLargePhone ? 44 : 42) : isLargePhone ? 41 : 39,
             Math.floor(
-              (viewportSize.width - 32 - (startingRack.length + 1) * compactRackGapWidth) /
+              (viewportSize.width - compactOuterPadding - (startingRack.length + 1) * compactRackGapWidth) /
                 startingRack.length
             )
           )
         )
       : 46
   const rackTileSize = isCompactMobile ? compactRackTileSize : isDesktopHardMode ? 42 : 56
-  const actionButtonMinHeight = isCompactMobile ? 42 : isDesktopHardMode ? 42 : 54
+  const actionButtonMinHeight = isCompactMobile ? (isSmallPhone ? 38 : 40) : isDesktopHardMode ? 42 : 54
   const boardMaxWidth = `${boardSize * boardCellSize + (boardSize - 1) * boardGap}px`
-  const compactViewportWidth = Math.max(0, viewportSize.width - 16)
+  const compactViewportWidth = Math.max(0, viewportSize.width - compactOuterPadding)
+  const compactHeaderReserve =
+    loadedGameConfig.mode === "mini"
+      ? isShortPhone
+        ? 200
+        : isLargePhone
+          ? 216
+          : 208
+      : isShortPhone
+        ? 240
+        : isLargePhone
+          ? 222
+          : 230
   const compactViewportHeightBudget = Math.max(
     0,
-    viewportSize.height - 238
+    viewportSize.height - compactHeaderReserve
   )
   const compactPuzzleFrameWidth =
     isCompactMobile && compactViewportWidth > 0
       ? Math.max(
-          260,
-          Math.min(compactViewportWidth, compactViewportHeightBudget || compactViewportWidth)
+          loadedGameConfig.mode === "mini" ? 220 : 252,
+          Math.min(
+            compactViewportWidth,
+            compactViewportHeightBudget || compactViewportWidth,
+            loadedGameConfig.mode === "mini"
+              ? isLargePhone
+                ? 376
+                : 344
+              : isLargePhone
+                ? 408
+                : 372
+          )
         )
       : null
+  const homeCardHorizontalPadding = isCompactMobile ? (isSmallPhone ? 14 : isLargePhone ? 18 : 16) : 28
+  const homeBrandTileGap = isCompactMobile ? (isSmallPhone ? 2 : 3) : 4
+  const homeBrandTileSize =
+    isCompactMobile && compactViewportWidth > 0
+      ? Math.max(
+          isSmallPhone ? 34 : isLargePhone ? 40 : 37,
+          Math.min(
+            isLargePhone ? 42 : 38,
+            Math.floor((compactViewportWidth - homeCardHorizontalPadding * 2 - homeBrandTileGap * 6) / 7)
+          )
+        )
+      : 56
+  const homeBrandLetterSize = isCompactMobile
+    ? isSmallPhone
+      ? "20px"
+      : isLargePhone
+        ? "24px"
+        : "22px"
+    : "34px"
+  const homeBrandScoreSize = isCompactMobile
+    ? isSmallPhone
+      ? "8px"
+      : "9px"
+    : "11px"
+  const compactModalInset = isCompactMobile ? (isSmallPhone ? 12 : isLargePhone ? 20 : 16) : 24
+  const compactModalPadding = isCompactMobile ? (isSmallPhone ? "14px" : isLargePhone ? "18px" : "16px") : "20px"
   const boardTileFontSize = isCompactMobile
     ? "clamp(16px, 4.8vw, 20px)"
     : isDesktopHardMode
@@ -468,6 +525,8 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false)
   const [showPuzzleReview, setShowPuzzleReview] = useState(false)
   const [showResultsModal, setShowResultsModal] = useState(false)
+  const [optimalDefinition, setOptimalDefinition] = useState<string | null>(null)
+  const [isLoadingOptimalDefinition, setIsLoadingOptimalDefinition] = useState(false)
   const [recentPlacementKey, setRecentPlacementKey] = useState<string | null>(null)
   const [uiFeedback, setUiFeedback] = useState<{ kind: UiFeedbackKind; tick: number } | null>(null)
   const [soundMuted, setSoundMuted] = useState(false)
@@ -622,9 +681,18 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    setCountdownMs(getTimeUntilNextLocalDay(new Date()))
+    function syncClockState() {
+      const now = new Date()
+      setCountdownMs(getTimeUntilNextLocalDay(now))
+      setTodayDate((prev) => {
+        const nextDate = getLocalDateString(now)
+        return prev === nextDate ? prev : nextDate
+      })
+    }
+
+    syncClockState()
     const intervalId = window.setInterval(() => {
-      setCountdownMs(getTimeUntilNextLocalDay(new Date()))
+      syncClockState()
     }, 1000)
 
     return () => window.clearInterval(intervalId)
@@ -824,6 +892,28 @@ export default function Home() {
     hintLevel,
     hasLoadedSave,
   ])
+
+  const previousTodayDateRef = useRef(todayDate)
+
+  useEffect(() => {
+    const previousTodayDate = previousTodayDateRef.current
+    if (previousTodayDate === todayDate) return
+
+    previousTodayDateRef.current = todayDate
+
+    if (selectedDate === previousTodayDate) {
+      setSelectedDate(todayDate)
+    }
+
+    if (archiveMonthKey === getMonthKey(previousTodayDate)) {
+      setArchiveMonthKey(getMonthKey(todayDate))
+    }
+
+    if (loadedGameConfig.date === previousTodayDate) {
+      setLoadedGameConfig((prev) => ({ ...prev, date: todayDate }))
+      applyFreshPuzzleState(todayDate, loadedGameConfig.mode, "A new daily puzzle is ready.")
+    }
+  }, [todayDate, selectedDate, archiveMonthKey, loadedGameConfig.date, loadedGameConfig.mode])
 
   useEffect(() => {
     try {
@@ -1691,14 +1781,18 @@ export default function Home() {
     setMessage("Board cleared. Start a new move.")
   }
 
-  function resetCurrentPuzzle() {
-    const freshPuzzle = getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode)
+  function applyFreshPuzzleState(date: string, mode: "mini" | "easy", nextMessage: string) {
+    const freshPuzzle = getPuzzleByDate(date, mode)
 
-    try {
-      localStorage.removeItem(storageKey)
-    } catch {
-      // ignore
-    }
+    setPuzzleOptimal(null)
+    fullSolutionRef.current = null
+    loadPuzzleOptimal(date, mode)
+      .then((opt) => {
+        if (opt && opt.optimal_score > 0) {
+          setPuzzleOptimal({ score: opt.optimal_score, words: opt.optimal_words })
+        }
+      })
+      .catch(() => {})
 
     setRack(freshPuzzle.rack)
     setPlacedTiles([])
@@ -1717,9 +1811,20 @@ export default function Home() {
     setShowPuzzleReview(false)
     setShowResultsModal(false)
     setRecentPlacementKey(null)
-    setMessage("Puzzle reset. Start a new run.")
-    statsUpdatedRef.current = false
+    setMessage(nextMessage)
+    setHasLoadedSave(false)
     initialLoadDone.current = false
+    statsUpdatedRef.current = false
+  }
+
+  function resetCurrentPuzzle() {
+    try {
+      localStorage.removeItem(storageKey)
+    } catch {
+      // ignore
+    }
+
+    applyFreshPuzzleState(loadedGameConfig.date, loadedGameConfig.mode, "Puzzle reset. Start a new run.")
 
     saveSession({
       date: puzzle.date,
@@ -1835,32 +1940,11 @@ export default function Home() {
   }
 
   function selectPuzzleDate(date: string, mode: "mini" | "easy" = selectedMode) {
-    const newPuzzle = getPuzzleByDate(date, mode)
-    setPuzzleOptimal(null)
-    fullSolutionRef.current = null
-    // Fetch optimal score from DB to skip solver
-    loadPuzzleOptimal(date, mode).then((opt) => {
-      if (opt && opt.optimal_score > 0) {
-        setPuzzleOptimal({ score: opt.optimal_score, words: opt.optimal_words })
-      }
-    }).catch(() => {})
+    applyFreshPuzzleState(date, mode, "Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
     setLoadedGameConfig({ date, mode })
     setSelectedMode(mode)
     setViewMode("game")
     setSelectedDate(date)
-    setRack(newPuzzle.rack)
-    setPlacedTiles([])
-    setSelectedTile(null)
-    setDraggedTile(null)
-    setDraggedPlacedTile(null)
-    setRackDropIndex(null)
-    setShowMoreActions(false)
-    setShowPuzzleReview(false)
-    setHintLevel(0)
-    setShowHint(false)
-    setHasLoadedSave(false)
-    initialLoadDone.current = false
-    statsUpdatedRef.current = false
 
     // Load saved state from API, fall back to localStorage
     const key = `daily-word-game-${date}-${mode}`
@@ -2155,6 +2239,28 @@ export default function Home() {
     }
   }, [gameOver, puzzle, solution.bestScore, solution.bestWords])
 
+  useEffect(() => {
+    if (!showResultsModal || !gameOver || !primaryOptimalWord) {
+      setOptimalDefinition(null)
+      setIsLoadingOptimalDefinition(false)
+      return
+    }
+
+    let cancelled = false
+    setIsLoadingOptimalDefinition(true)
+    setOptimalDefinition(null)
+
+    loadWordDefinition(primaryOptimalWord).then((definition) => {
+      if (cancelled) return
+      setOptimalDefinition(definition)
+      setIsLoadingOptimalDefinition(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [showResultsModal, gameOver, primaryOptimalWord])
+
   function getRating() {
     if (solution.bestScore <= 0) return ""
     const percent = bestScore / solution.bestScore
@@ -2357,8 +2463,8 @@ export default function Home() {
     ? allWordPreviews.reduce((sum, preview) => sum + preview.score, 0)
     : null
   const homeActionButtonStyle: React.CSSProperties = {
-    padding: isCompactMobile ? "14px 16px" : "16px 18px",
-    fontSize: isCompactMobile ? "15px" : "16px",
+    padding: isCompactMobile ? (isSmallPhone ? "13px 14px" : isLargePhone ? "15px 18px" : "14px 16px") : "16px 18px",
+    fontSize: isCompactMobile ? (isSmallPhone ? "14px" : "15px") : "16px",
     borderRadius: "18px",
     border: "1px solid rgba(123, 98, 65, 0.16)",
     background: "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
@@ -2948,9 +3054,7 @@ export default function Home() {
         height: "100dvh",
         background:
           "linear-gradient(180deg, rgba(251,245,234,0.96) 0%, rgba(242,230,210,0.96) 100%)",
-        padding: isCompactMobile
-          ? "max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom))"
-          : "clamp(12px, 4vw, 32px)",
+        padding: compactScreenPadding,
         fontFamily: "var(--font-sans)",
         color: "#2f2419",
         overflow: "hidden",
@@ -2970,14 +3074,16 @@ export default function Home() {
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
-              gap: isCompactMobile ? "18px" : "22px",
+              gap: isCompactMobile ? (isSmallPhone ? "12px" : isLargePhone ? "18px" : "16px") : "22px",
               maxWidth: "760px",
               margin: "0 auto",
             }}
           >
             <div
               style={{
-                padding: isCompactMobile ? "20px 18px" : "28px 28px 24px",
+                padding: isCompactMobile
+                  ? `${isSmallPhone ? "16px" : isLargePhone ? "20px" : "18px"} ${homeCardHorizontalPadding}px`
+                  : "28px 28px 24px",
                 borderRadius: isCompactMobile ? "24px" : "28px",
                 background:
                   "linear-gradient(180deg, rgba(255,250,240,0.96) 0%, rgba(244,233,214,0.98) 100%)",
@@ -2992,7 +3098,7 @@ export default function Home() {
                   justifyContent: "space-between",
                   gap: "12px",
                   flexWrap: "wrap",
-                  marginBottom: isCompactMobile ? "8px" : "10px",
+                  marginBottom: isCompactMobile ? "6px" : "10px",
                 }}
               >
                 <p
@@ -3015,7 +3121,7 @@ export default function Home() {
                     gap: isCompactMobile ? "8px" : "10px",
                     flexWrap: "wrap",
                     marginLeft: "auto",
-                    fontSize: isCompactMobile ? "12px" : "13px",
+                    fontSize: isCompactMobile ? (isSmallPhone ? "11px" : "12px") : "13px",
                     color: "#8a6a42",
                     fontWeight: 700,
                   }}
@@ -3033,14 +3139,12 @@ export default function Home() {
               <div
                 aria-label="Lexicon"
                 style={{
-                  display: "flex",
-                  flexWrap: "nowrap",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
                   alignItems: "center",
-                  justifyContent: "center",
-                  gap: isCompactMobile ? "2px" : "4px",
-                  margin: isCompactMobile ? "0 0 10px" : "0 0 12px",
-                  overflowX: "auto",
-                  paddingBottom: "4px",
+                  justifyItems: "center",
+                  gap: `${homeBrandTileGap}px`,
+                  margin: isCompactMobile ? "0 0 8px" : "0 0 12px",
                 }}
               >
                 {homeBrandRack.map((letter, index) => (
@@ -3071,8 +3175,8 @@ export default function Home() {
                       }}
                       onTouchStart={(e) => handleHomeBrandTouchStart(e, index)}
                       style={{
-                        width: isCompactMobile ? "40px" : "56px",
-                        height: isCompactMobile ? "40px" : "56px",
+                        width: `${homeBrandTileSize}px`,
+                        height: `${homeBrandTileSize}px`,
                         borderRadius: isCompactMobile ? "10px" : "14px",
                         border: "2px solid rgba(135,106,63,0.9)",
                         background:
@@ -3080,7 +3184,7 @@ export default function Home() {
                         boxShadow: "0 8px 14px rgba(98, 74, 34, 0.12)",
                         display: "grid",
                         placeItems: "center",
-                        fontSize: isCompactMobile ? "24px" : "34px",
+                        fontSize: homeBrandLetterSize,
                         fontWeight: 800,
                         color: "#332616",
                         position: "relative",
@@ -3100,7 +3204,7 @@ export default function Home() {
                           position: "absolute",
                           right: isCompactMobile ? "5px" : "7px",
                           bottom: isCompactMobile ? "4px" : "6px",
-                          fontSize: isCompactMobile ? "9px" : "11px",
+                          fontSize: homeBrandScoreSize,
                           fontWeight: 700,
                           color: "#6d5430",
                           opacity: 0.85,
@@ -3126,7 +3230,7 @@ export default function Home() {
               <p
                 style={{
                   margin: 0,
-                  fontSize: isCompactMobile ? "15px" : "17px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "13px" : "14px") : "17px",
                   color: "#5b4630",
                   maxWidth: "40ch",
                   lineHeight: 1.45,
@@ -3138,13 +3242,13 @@ export default function Home() {
               </p>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isCompactMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-                gap: "12px",
-              }}
-            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isCompactMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
+                  gap: isCompactMobile ? (isSmallPhone ? "10px" : "12px") : "12px",
+                }}
+              >
               <button
                 onClick={() => {
                   setViewMode("daily")
@@ -3257,7 +3361,7 @@ export default function Home() {
               flexDirection: "column",
               justifyContent: "center",
               alignItems: "center",
-              gap: isCompactMobile ? "18px" : "22px",
+              gap: isCompactMobile ? (isSmallPhone ? "12px" : "16px") : "22px",
               maxWidth: "560px",
               margin: "0 auto",
               textAlign: "center",
@@ -3291,19 +3395,19 @@ export default function Home() {
             <div
               style={{
                 width: "100%",
-                padding: isCompactMobile ? "28px 20px 24px" : "36px 28px 30px",
+                padding: isCompactMobile ? (isSmallPhone ? "24px 16px 20px" : "26px 18px 22px") : "36px 28px 30px",
               }}
             >
               <div
                 style={{
-                  width: isCompactMobile ? "72px" : "84px",
-                  height: isCompactMobile ? "72px" : "84px",
+                  width: isCompactMobile ? (isSmallPhone ? "64px" : "68px") : "84px",
+                  height: isCompactMobile ? (isSmallPhone ? "64px" : "68px") : "84px",
                   margin: "0 auto 14px",
                   borderRadius: "20px",
                   background: "rgba(255,255,255,0.28)",
                   display: "grid",
                   placeItems: "center",
-                  fontSize: isCompactMobile ? "34px" : "40px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "30px" : "32px") : "40px",
                 }}
               >
                 ◈
@@ -3311,7 +3415,7 @@ export default function Home() {
               <h1
                 style={{
                   margin: 0,
-                  fontSize: isCompactMobile ? "42px" : "50px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "36px" : "40px") : "50px",
                   lineHeight: 1,
                   fontFamily: "Georgia, serif",
                 }}
@@ -3322,7 +3426,7 @@ export default function Home() {
                 style={{
                   margin: "10px auto 0",
                   maxWidth: "12ch",
-                  fontSize: isCompactMobile ? "17px" : "20px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "15px" : "17px") : "20px",
                   lineHeight: 1.25,
                   color: "#3d2a38",
                   fontWeight: 500,
@@ -3333,7 +3437,7 @@ export default function Home() {
 
               <div
                 style={{
-                  marginTop: isCompactMobile ? "24px" : "28px",
+                  marginTop: isCompactMobile ? (isSmallPhone ? "18px" : "22px") : "28px",
                   background: "rgba(129, 83, 128, 0.16)",
                   borderRadius: "14px",
                   padding: "4px",
@@ -3360,7 +3464,7 @@ export default function Home() {
                         background: isSelected ? "#fffaf1" : "transparent",
                         color: isSelected ? "#2f2419" : "#3d2a38",
                         cursor: "pointer",
-                        fontSize: isCompactMobile ? "15px" : "16px",
+                        fontSize: isCompactMobile ? (isSmallPhone ? "14px" : "15px") : "16px",
                         fontWeight: 800,
                         boxShadow: isSelected ? "0 4px 10px rgba(61, 42, 56, 0.08)" : "none",
                       }}
@@ -3374,15 +3478,15 @@ export default function Home() {
               <button
                 onClick={() => selectPuzzleDate(todayDate, selectedMode)}
                 style={{
-                  marginTop: isCompactMobile ? "18px" : "20px",
-                  minWidth: isCompactMobile ? "140px" : "160px",
-                  padding: isCompactMobile ? "14px 24px" : "16px 28px",
+                  marginTop: isCompactMobile ? "16px" : "20px",
+                  minWidth: isCompactMobile ? (isSmallPhone ? "132px" : "140px") : "160px",
+                  padding: isCompactMobile ? (isSmallPhone ? "12px 20px" : "14px 24px") : "16px 28px",
                   borderRadius: "999px",
                   border: "none",
                   background: "#17120d",
                   color: "#fffaf1",
                   cursor: "pointer",
-                  fontSize: isCompactMobile ? "24px" : "26px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "22px" : "24px") : "26px",
                   fontWeight: 800,
                   boxShadow: "0 12px 24px rgba(23,18,13,0.2)",
                 }}
@@ -3392,8 +3496,8 @@ export default function Home() {
 
               <div
                 style={{
-                  marginTop: isCompactMobile ? "18px" : "22px",
-                  fontSize: isCompactMobile ? "16px" : "18px",
+                  marginTop: isCompactMobile ? "16px" : "22px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "15px" : "16px") : "18px",
                   color: "#2f2419",
                   fontWeight: 700,
                 }}
@@ -3403,7 +3507,7 @@ export default function Home() {
               <div
                 style={{
                   marginTop: "10px",
-                  fontSize: isCompactMobile ? "14px" : "15px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "13px" : "14px") : "15px",
                   color: "#4f384b",
                   fontWeight: 700,
                 }}
@@ -3413,7 +3517,7 @@ export default function Home() {
               <div
                 style={{
                   marginTop: "8px",
-                  fontSize: isCompactMobile ? "14px" : "15px",
+                  fontSize: isCompactMobile ? (isSmallPhone ? "13px" : "14px") : "15px",
                   lineHeight: 1.45,
                   color: "#4f384b",
                 }}
@@ -3742,20 +3846,22 @@ export default function Home() {
               display: "flex",
               justifyContent: "center",
               alignItems: "flex-start",
-              padding: isCompactMobile ? "max(10px, env(safe-area-inset-top)) 10px 0" : "20px 24px 0",
+              padding: isCompactMobile
+                ? `${isSmallPhone ? "max(8px, env(safe-area-inset-top)) 8px 0" : "max(10px, env(safe-area-inset-top))"} ${compactModalInset}px 0`
+                : "20px 24px 0",
             }}
           >
             <div
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: `min(${isCompactMobile ? "calc(100vw - 20px)" : "760px"}, calc(100vw - 24px))`,
-                maxHeight: isCompactMobile ? "min(66vh, 680px)" : "min(72vh, 760px)",
+                width: `min(${isCompactMobile ? `calc(100vw - ${compactModalInset * 2}px)` : "760px"}, calc(100vw - 24px))`,
+                maxHeight: isCompactMobile ? (isSmallPhone ? "min(70vh, 680px)" : "min(68vh, 700px)") : "min(72vh, 760px)",
                 overflowY: "auto",
                 background: "linear-gradient(180deg, rgba(255,250,240,0.98) 0%, rgba(247,242,234,0.98) 100%)",
                 border: "1px solid rgba(123, 98, 65, 0.14)",
                 borderRadius: isCompactMobile ? "18px" : "22px",
                 boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
-                padding: isCompactMobile ? "16px" : "18px 20px",
+                padding: isCompactMobile ? compactModalPadding : "18px 20px",
                 animation: reducedMotionEnabled ? undefined : "pop-in-sheet 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
               }}
             >
@@ -3793,7 +3899,7 @@ export default function Home() {
 
         <div
           style={{
-            padding: isCompactMobile ? "0 2px" : "0",
+            padding: isCompactMobile ? (isSmallPhone ? "0 1px" : isLargePhone ? "0 4px" : "0 2px") : "0",
             marginBottom: isCompactMobile ? "8px" : "14px",
             flexShrink: 0,
             width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
@@ -3866,7 +3972,7 @@ export default function Home() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              padding: isCompactMobile ? "16px" : "24px",
+              padding: isCompactMobile ? `${compactModalInset}px` : "24px",
               background: "rgba(34, 25, 13, 0.18)",
               backdropFilter: "blur(6px)",
               WebkitBackdropFilter: "blur(6px)",
@@ -3877,10 +3983,10 @@ export default function Home() {
               onClick={(e) => e.stopPropagation()}
               style={{
                 position: "relative",
-                width: `min(${isCompactMobile ? "calc(100vw - 16px)" : "620px"}, calc(100vw - 24px))`,
-                maxHeight: isCompactMobile ? "min(78vh, 720px)" : undefined,
+                width: `min(${isCompactMobile ? `calc(100vw - ${compactModalInset * 2}px)` : "620px"}, calc(100vw - 24px))`,
+                maxHeight: isCompactMobile ? (isSmallPhone ? "min(80vh, 720px)" : "min(78vh, 760px)") : undefined,
                 overflowY: isCompactMobile ? "auto" : undefined,
-                padding: isCompactMobile ? "14px 14px 12px" : "20px",
+                padding: isCompactMobile ? `${isSmallPhone ? "14px" : "16px"} ${isSmallPhone ? "14px" : "16px"} 12px` : "20px",
                 background: "linear-gradient(180deg, rgba(245,251,239,0.98) 0%, rgba(237,246,231,0.98) 100%)",
                 border: "1px solid rgba(98, 128, 76, 0.22)",
                 borderRadius: isCompactMobile ? "18px" : "22px",
@@ -3935,6 +4041,38 @@ export default function Home() {
             <p>
               Optimal play: <strong>{solution.bestWords.join(", ") || "Unknown"}</strong>
             </p>
+            {primaryOptimalWord && (
+              <div
+                style={{
+                  marginTop: "-2px",
+                  marginBottom: "8px",
+                  padding: "10px 12px",
+                  borderRadius: "12px",
+                  background: "rgba(255,255,255,0.56)",
+                  border: "1px solid rgba(98, 128, 76, 0.12)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "#55713f",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Definition
+                </div>
+                <div style={{ fontSize: "14px", lineHeight: 1.5, color: "#2f2419" }}>
+                  {isLoadingOptimalDefinition
+                    ? `Looking up ${primaryOptimalWord.toLowerCase()}...`
+                    : optimalDefinition
+                      ? `${primaryOptimalWord}: ${optimalDefinition}`
+                      : `No definition available for ${primaryOptimalWord.toLowerCase()}.`}
+                </div>
+              </div>
+            )}
             {getFullSolution().bestPlacement.length > 0 && (
               <p style={{ fontSize: "13px", color: "#1d4ed8", margin: "4px 0 0" }}>
                 Blue tiles on the board show the optimal placement, not the word you submitted.
@@ -4016,26 +4154,26 @@ export default function Home() {
         {showPuzzleReview && (
           <div
             onClick={() => setShowPuzzleReview(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: isCompactMobile ? "16px" : "24px",
-              background: "rgba(34, 25, 13, 0.24)",
-              backdropFilter: "blur(6px)",
-              WebkitBackdropFilter: "blur(6px)",
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: isCompactMobile ? `${compactModalInset}px` : "24px",
+            background: "rgba(34, 25, 13, 0.24)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
               zIndex: 50,
             }}
           >
             <div
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: `min(${isCompactMobile ? "calc(100vw - 20px)" : "760px"}, calc(100vw - 24px))`,
+                width: `min(${isCompactMobile ? `calc(100vw - ${compactModalInset * 2}px)` : "760px"}, calc(100vw - 24px))`,
                 maxHeight: "min(84vh, 920px)",
                 overflowY: "auto",
-                padding: isCompactMobile ? "16px" : "20px",
+                padding: isCompactMobile ? compactModalPadding : "20px",
                 background: "linear-gradient(180deg, rgba(255,250,240,0.98) 0%, rgba(247,242,234,0.98) 100%)",
                 border: "1px solid rgba(123, 98, 65, 0.14)",
                 borderRadius: isCompactMobile ? "18px" : "22px",
@@ -5098,7 +5236,7 @@ export default function Home() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 10001,
-            padding: "16px",
+            padding: isCompactMobile ? `${compactModalInset}px` : "16px",
           }}
         >
           <div
@@ -5106,10 +5244,10 @@ export default function Home() {
             style={{
               backgroundColor: "#fffaf0",
               borderRadius: "18px",
-              padding: isCompactMobile ? "18px 16px" : "24px",
+              padding: isCompactMobile ? `${isSmallPhone ? "16px 14px" : "18px 16px"}` : "24px",
               maxWidth: "440px",
               width: "100%",
-              maxHeight: isCompactMobile ? "min(80vh, 680px)" : undefined,
+              maxHeight: isCompactMobile ? (isSmallPhone ? "min(82vh, 680px)" : "min(80vh, 700px)") : undefined,
               overflowY: isCompactMobile ? "auto" : undefined,
               border: "1px solid rgba(123, 98, 65, 0.18)",
               boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
@@ -5271,7 +5409,7 @@ export default function Home() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 10002,
-            padding: "16px",
+            padding: isCompactMobile ? `${compactModalInset}px` : "16px",
           }}
         >
           <div
@@ -5279,9 +5417,11 @@ export default function Home() {
             style={{
               backgroundColor: "#fffaf0",
               borderRadius: "18px",
-              padding: isCompactMobile ? "20px 18px" : "24px",
+              padding: isCompactMobile ? `${isSmallPhone ? "18px 16px" : "20px 18px"}` : "24px",
               maxWidth: "400px",
               width: "100%",
+              maxHeight: isCompactMobile ? "min(84vh, 760px)" : undefined,
+              overflowY: isCompactMobile ? "auto" : undefined,
               border: "1px solid rgba(123, 98, 65, 0.18)",
               boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
               color: "#2f2419",
@@ -5459,16 +5599,18 @@ export default function Home() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 10000,
-            padding: "16px",
+            padding: isCompactMobile ? `${compactModalInset}px` : "16px",
           }}
         >
           <div
             style={{
               backgroundColor: "#fffaf0",
               borderRadius: "12px",
-              padding: "28px 24px",
+              padding: isCompactMobile ? (isSmallPhone ? "20px 16px" : "22px 18px") : "28px 24px",
               maxWidth: "480px",
               width: "100%",
+              maxHeight: isCompactMobile ? "min(84vh, 760px)" : undefined,
+              overflowY: isCompactMobile ? "auto" : undefined,
               border: "2px solid #c8b68f",
               fontFamily: "Georgia, serif",
               color: "#2f2419",

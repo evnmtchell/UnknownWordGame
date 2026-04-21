@@ -281,6 +281,7 @@ const HARD_BOARD_SIZE = 11
 const MINI_BOARD_SIZE = 5
 const EASY_BOARD_SIZE = 7
 const FUTURE_EASY_REBUILD_START = "2026-04-18"
+const MINI_MODE_REBUILD_START = "2026-04-21"
 
 type HardTransform = {
   transpose?: boolean
@@ -347,6 +348,26 @@ const miniModeBlueprints: MiniSlot[][] = [
     { direction: "across", row: 2, col: 0, word: "FABLE" },
     { direction: "down", row: 0, col: 2, word: "CAB" },
     { direction: "down", row: 1, col: 4, word: "PEA" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "BREAD" },
+    { direction: "down", row: 0, col: 1, word: "AURA" },
+    { direction: "down", row: 1, col: 3, word: "MAP" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "STONE" },
+    { direction: "down", row: 0, col: 1, word: "MATH" },
+    { direction: "down", row: 1, col: 3, word: "ANT" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "HOUSE" },
+    { direction: "down", row: 0, col: 1, word: "AEON" },
+    { direction: "down", row: 1, col: 3, word: "ASH" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "RIVER" },
+    { direction: "down", row: 0, col: 1, word: "GRID" },
+    { direction: "down", row: 1, col: 3, word: "PEA" },
   ],
 ]
 
@@ -444,6 +465,98 @@ const easyModeBlueprints: EasySlot[][] = [
     { direction: "across", row: 3, col: 1, word: "WATER" },
     { direction: "down", row: 1, col: 3, word: "METAL" },
     { direction: "down", row: 2, col: 5, word: "ART" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "SHORE" },
+    { direction: "down", row: 1, col: 2, word: "ECHO" },
+    { direction: "down", row: 2, col: 4, word: "ARM" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "GRAIN" },
+    { direction: "down", row: 1, col: 2, word: "BARK" },
+    { direction: "down", row: 2, col: 4, word: "AID" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "MOUSE" },
+    { direction: "down", row: 1, col: 2, word: "AEON" },
+    { direction: "down", row: 2, col: 4, word: "ASK" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "BRICK" },
+    { direction: "down", row: 1, col: 2, word: "ACRE" },
+    { direction: "down", row: 2, col: 4, word: "ACE" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "CLOVE" },
+    { direction: "down", row: 1, col: 2, word: "ISLE" },
+    { direction: "down", row: 2, col: 4, word: "EVE" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "TIGER" },
+    { direction: "down", row: 1, col: 2, word: "PAIN" },
+    { direction: "down", row: 2, col: 4, word: "PEA" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "ROAST" },
+    { direction: "down", row: 1, col: 2, word: "AEON" },
+    { direction: "down", row: 2, col: 4, word: "ASH" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "QUILT" },
+    { direction: "down", row: 1, col: 2, word: "SOUP" },
+    { direction: "down", row: 2, col: 4, word: "ELM" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "POCKET" },
+    { direction: "down", row: 1, col: 1, word: "AEON" },
+    { direction: "down", row: 2, col: 4, word: "TEN" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "THRIVE" },
+    { direction: "down", row: 1, col: 1, word: "ECHO" },
+    { direction: "down", row: 2, col: 4, word: "EVE" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "CANDLE" },
+    { direction: "down", row: 1, col: 1, word: "BEAM" },
+    { direction: "down", row: 2, col: 4, word: "ELM" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "SPRING" },
+    { direction: "down", row: 1, col: 1, word: "HOPE" },
+    { direction: "down", row: 2, col: 4, word: "ANT" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "HARBOR" },
+    { direction: "down", row: 1, col: 1, word: "BEAM" },
+    { direction: "down", row: 2, col: 4, word: "SON" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "THREAD" },
+    { direction: "down", row: 1, col: 3, word: "BLESS" },
+  ],
+  [
+    { direction: "across", row: 3, col: 1, word: "CLOUD" },
+    { direction: "down", row: 1, col: 3, word: "BROTH" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "PLANETS" },
+    { direction: "down", row: 1, col: 1, word: "HELLO" },
+    { direction: "down", row: 1, col: 3, word: "ANNEX" },
+    { direction: "down", row: 1, col: 5, word: "METAL" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "MARKETS" },
+    { direction: "down", row: 1, col: 0, word: "COMET" },
+    { direction: "down", row: 1, col: 2, word: "SHRED" },
+    { direction: "down", row: 1, col: 4, word: "BLESS" },
+    { direction: "down", row: 1, col: 6, word: "MUSIC" },
+  ],
+  [
+    { direction: "across", row: 3, col: 0, word: "POCKETS" },
+    { direction: "down", row: 1, col: 1, word: "BROOK" },
+    { direction: "down", row: 1, col: 3, word: "TOKEN" },
+    { direction: "down", row: 1, col: 5, word: "METAL" },
   ],
 ]
 
@@ -612,9 +725,15 @@ function getGeneratedEasyLayoutForDate(date: string) {
 }
 
 function getMiniModeLayoutForDate(date: string) {
-  const random = createSeededRandom(`mini-${date}`)
-  const slotLayout = miniModeBlueprints[Math.floor(random() * miniModeBlueprints.length)]
-  const transform = miniModeTransforms[Math.floor(random() * miniModeTransforms.length)]
+  const start = Date.parse(`${MINI_MODE_REBUILD_START}T00:00:00Z`)
+  const current = Date.parse(`${date}T00:00:00Z`)
+  const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
+  const comboCount = miniModeBlueprints.length * miniModeTransforms.length
+  const comboIndex = dayOffset % comboCount
+  const blueprintIndex = Math.floor(comboIndex / miniModeTransforms.length)
+  const transformIndex = comboIndex % miniModeTransforms.length
+  const slotLayout = miniModeBlueprints[blueprintIndex]
+  const transform = miniModeTransforms[transformIndex]
   const transformedLayout = buildMiniLayout(slotLayout, transform)
 
   for (const cell of transformedLayout) {
@@ -666,6 +785,10 @@ function validateEasyBlueprints() {
           bonusCells: defaultBonusCells,
           optimalScore: 0,
           optimalWords: [],
+        },
+        {
+          minWords: 2,
+          maxWords: 5,
         }
       )
     }
@@ -1401,10 +1524,15 @@ export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
   }
 
   if (mode === "easy") {
-    return {
+    const puzzle = {
       ...easyPuzzle,
       rack: generatedRack,
     }
+    validatePuzzleLayout(puzzle, {
+      minWords: 2,
+      maxWords: 5,
+    })
+    return puzzle
   }
 
   const hardPuzzle: DailyPuzzle = {
