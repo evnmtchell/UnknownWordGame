@@ -2573,23 +2573,21 @@ export default function Home() {
     }
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const allWordPreviews = useMemo(() => getAllWordPreviews(), [placedTiles, boardSize, fixedCellsMap, placedTilesMap, bonusCellsMap])
-  const validWordPreviews = useMemo(
-    () => allWordPreviews.filter((preview) => VALID_WORDS.has(preview.word)),
-    [allWordPreviews]
-  )
-  const validWordHighlightCells = useMemo(
-    () =>
-      new Set(
-        validWordPreviews.flatMap((preview) =>
-          preview.cells.map((cell) => getBoardCellKey(cell.row, cell.col))
-        )
-      ),
-    [validWordPreviews]
+  const currentDraftDirection = getMoveDirection()
+  const hasValidDraftLine =
+    placedTiles.length === 0 || currentDraftDirection !== null
+  const allWordPreviews = hasValidDraftLine ? getAllWordPreviews() : []
+  const validWordPreviews = allWordPreviews.filter((preview) => VALID_WORDS.has(preview.word))
+  const validWordHighlightCells = new Set(
+    validWordPreviews.flatMap((preview) =>
+      preview.cells.map((cell) => getBoardCellKey(cell.row, cell.col))
+    )
   )
   const canShowLiveScorePreview =
-    placedTiles.length > 0 && isTouchingFilledCells() && allWordPreviews.length > 0
+    placedTiles.length > 0 &&
+    hasValidDraftLine &&
+    isTouchingFilledCells() &&
+    allWordPreviews.length > 0
   const isLiveScorePreviewValid =
     canShowLiveScorePreview && validWordPreviews.length === allWordPreviews.length
   const liveScoreAnchorCell = canShowLiveScorePreview
