@@ -531,6 +531,8 @@ export default function Home() {
   const [nightModeEnabled, setNightModeEnabled] = useState(false)
   const [futurePuzzleTestMode, setFuturePuzzleTestMode] = useState(false)
   const [hasSavedTodayGame, setHasSavedTodayGame] = useState(false)
+  const [showShuffleNudge, setShowShuffleNudge] = useState(false)
+  const [lastPlayerActivityAt, setLastPlayerActivityAt] = useState(() => Date.now())
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<GameStats>(defaultStats)
   const statsUpdatedRef = useRef(false)
@@ -559,6 +561,12 @@ export default function Home() {
     () => new Map(puzzle.bonusCells.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.type])),
     [puzzle.bonusCells]
   )
+
+  function markPlayerActivity() {
+    setLastPlayerActivityAt(Date.now())
+    setShowShuffleNudge(false)
+  }
+
   function getFullSolution() {
     if (fullSolutionRef.current) return fullSolutionRef.current
     const solved = solvePuzzle(puzzle)
@@ -1221,6 +1229,7 @@ export default function Home() {
 
   function shuffleRack() {
     if (gameOver) return
+    markPlayerActivity()
     setRack((prev) => {
       const tilesOnly = shuffleArray(prev.filter((tile): tile is string => tile !== null))
       let tileIndex = 0
@@ -1233,6 +1242,7 @@ export default function Home() {
   }
 
   function reorderRackTile(fromIndex: number, targetIndex: number) {
+    markPlayerActivity()
     let finalIndex = targetIndex
     if (fromIndex < targetIndex) {
       finalIndex = targetIndex - 1
@@ -1286,6 +1296,7 @@ export default function Home() {
   }
 
   function placeTileOnBoard(tileData: TileSelection, row: number, col: number) {
+    markPlayerActivity()
     if (attemptsLeft === 0) {
       setMessage("No attempts left.")
       return
@@ -1310,10 +1321,44 @@ export default function Home() {
   }
 
   function movePlacedTileOnBoard(tile: DraggedPlacedTile, row: number, col: number) {
+    markPlayerActivity()
     if (!tile) return
 
     if (tile.row === row && tile.col === col) {
       setDraggedPlacedTile(null)
+      return
+    }
+
+    const targetPlacedTile = getPlacedTile(row, col)
+
+    if (targetPlacedTile) {
+      setPlacedTiles((prev) =>
+        prev.map((placed) => {
+          if (placed.row === tile.row && placed.col === tile.col) {
+            return {
+              ...placed,
+              row,
+              col,
+            }
+          }
+
+          if (placed.row === row && placed.col === col) {
+            return {
+              ...placed,
+              row: tile.row,
+              col: tile.col,
+            }
+          }
+
+          return placed
+        })
+      )
+      draggedPlacedTileRef.current = null
+      setDraggedPlacedTile(null)
+      setSelectedTile(null)
+      setRackDropIndex(null)
+      triggerAppHapticFeedback(10)
+      setMessage(`Swapped ${tile.letter} and ${targetPlacedTile.letter}.`)
       return
     }
 
@@ -1347,6 +1392,7 @@ export default function Home() {
   }
 
   function handleCellClick(row: number, col: number) {
+    markPlayerActivity()
     const placedTile = getPlacedTile(row, col)
 
     if (draggedPlacedTile) {
@@ -1401,6 +1447,7 @@ export default function Home() {
     index: number
   ) {
     if (attemptsLeft === 0) return
+    markPlayerActivity()
     e.dataTransfer.setData("text/plain", `${tile}-${index}`)
     e.dataTransfer.effectAllowed = "move"
     setDraggedTile({ letter: tile, index, isBlank: tile === BLANK_TILE })
@@ -1425,6 +1472,7 @@ export default function Home() {
     rackIndex: number
   ) {
     if (attemptsLeft === 0) return
+    markPlayerActivity()
     e.dataTransfer.setData("text/plain", `${letter}-${row}-${col}`)
     e.dataTransfer.effectAllowed = "move"
     setDraggedPlacedTile({ row, col, letter, isBlank, rackIndex })
@@ -1441,6 +1489,7 @@ export default function Home() {
   }
 
   function handleCellDrop(row: number, col: number) {
+    markPlayerActivity()
     const activeDraggedTile = draggedTileRef.current
     const activeDraggedPlacedTile = draggedPlacedTileRef.current
 
@@ -1456,6 +1505,7 @@ export default function Home() {
 
   function returnPlacedTileToRack(tile: DraggedPlacedTile) {
     if (!tile) return
+    markPlayerActivity()
 
     setPlacedTiles((prev) =>
       prev.filter((placed) => !(placed.row === tile.row && placed.col === tile.col))
@@ -1722,6 +1772,7 @@ export default function Home() {
   }
 
   function submitMove() {
+    markPlayerActivity()
     if (attemptsLeft === 0) {
       setMessage("No attempts left.")
       return
@@ -1864,6 +1915,7 @@ export default function Home() {
   }
 
   function clearCurrentMove() {
+    markPlayerActivity()
     setRack((prev) => restoreRackSlotsFromPlacedTiles(prev, placedTiles))
     setPlacedTiles([])
     setSelectedTile(null)
@@ -2311,6 +2363,19 @@ export default function Home() {
   const gameOver = attemptsLeft === 0
   const canShare = attemptHistory.length > 0
   const currentTurnIndex = Math.min(attemptHistory.length, maxAttempts - 1)
+
+  useEffect(() => {
+    if (viewMode !== "game" || gameOver || attemptsLeft === 0 || showMoreActions) {
+      setShowShuffleNudge(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowShuffleNudge(true)
+    }, 10000)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [lastPlayerActivityAt, viewMode, gameOver, attemptsLeft, showMoreActions])
 
   useEffect(() => {
     if (gameOver) {
@@ -5235,25 +5300,66 @@ export default function Home() {
                   Clear
                 </button>
 
-                <button
-                  onClick={shuffleRack}
-                  disabled={gameOver}
-                  style={{
-                    width: "100%",
-                    minHeight: `${actionButtonMinHeight}px`,
-                    padding: isCompactMobile ? "6px 6px" : isDesktopHardMode ? "8px 10px" : "10px 14px",
-                    fontSize: isCompactMobile ? "12px" : isDesktopHardMode ? "14px" : "15px",
-                    borderRadius: isCompactMobile ? "16px" : "18px",
-                    border: isCompactMobile ? "none" : "1px solid rgba(69,50,27,0.18)",
-                    backgroundColor: isCompactMobile ? "transparent" : gameOver ? "#ddd6c8" : "#efe2c7",
-                    cursor: gameOver ? "not-allowed" : "pointer",
-                    color: isCompactMobile ? (gameOver ? "#9d948a" : "#1f1a14") : gameOver ? "#8b7c67" : "#2f2419",
-                    fontWeight: isCompactMobile ? 900 : 800,
-                    boxShadow: isCompactMobile ? "none" : undefined,
-                  }}
-                >
-                  Shuffle
-                </button>
+                <div style={{ position: "relative", width: "100%" }}>
+                  {showShuffleNudge && !gameOver && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "50%",
+                        bottom: `calc(100% + ${isCompactMobile ? 8 : 10}px)`,
+                        transform: "translateX(-50%)",
+                        backgroundColor: "#fff7ea",
+                        color: "#2f2419",
+                        border: "1px solid rgba(123, 98, 65, 0.24)",
+                        borderRadius: "14px",
+                        padding: isCompactMobile ? "8px 10px" : "10px 12px",
+                        fontSize: isCompactMobile ? "11px" : "12px",
+                        fontWeight: 700,
+                        lineHeight: 1.35,
+                        boxShadow: "0 12px 28px rgba(47, 36, 25, 0.14)",
+                        maxWidth: isCompactMobile ? "150px" : "180px",
+                        textAlign: "center",
+                        zIndex: 4,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      Stuck? Try a shuffle.
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: "50%",
+                          top: "100%",
+                          transform: "translateX(-50%)",
+                          width: 0,
+                          height: 0,
+                          borderLeft: "9px solid transparent",
+                          borderRight: "9px solid transparent",
+                          borderTop: "10px solid #fff7ea",
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    onClick={shuffleRack}
+                    disabled={gameOver}
+                    style={{
+                      width: "100%",
+                      minHeight: `${actionButtonMinHeight}px`,
+                      padding: isCompactMobile ? "6px 6px" : isDesktopHardMode ? "8px 10px" : "10px 14px",
+                      fontSize: isCompactMobile ? "12px" : isDesktopHardMode ? "14px" : "15px",
+                      borderRadius: isCompactMobile ? "16px" : "18px",
+                      border: isCompactMobile ? "none" : "1px solid rgba(69,50,27,0.18)",
+                      backgroundColor: isCompactMobile ? "transparent" : gameOver ? "#ddd6c8" : "#efe2c7",
+                      cursor: gameOver ? "not-allowed" : "pointer",
+                      color: isCompactMobile ? (gameOver ? "#9d948a" : "#1f1a14") : gameOver ? "#8b7c67" : "#2f2419",
+                      fontWeight: isCompactMobile ? 900 : 800,
+                      boxShadow: isCompactMobile ? "none" : undefined,
+                    }}
+                  >
+                    Shuffle
+                  </button>
+                </div>
 
                 <button
                   onClick={submitMove}
@@ -5816,19 +5922,19 @@ export default function Home() {
             <h2 style={{ marginTop: 0, fontSize: "22px" }}>How to Play</h2>
             <ul style={{ paddingLeft: "20px", lineHeight: "1.7", marginBottom: "20px" }}>
               <li>
-                <strong>Place tiles</strong> from your rack onto the board. Your tiles must all be in one row or one column, and they must connect to the letters already on the board.
+                <strong>Place tiles</strong> from your rack onto the board. Keep your move in one row or one column.
               </li>
               <li>
-                <strong>Form valid words.</strong> The tiles you place, combined with existing board letters, must spell real English words. Perpendicular words created by your placement also count.
+                <strong>Make real words.</strong> Your move has to connect to the board, and every word you make must be valid.
               </li>
               <li>
-                <strong>Score big</strong> with bonus squares: DL (double letter), TL (triple letter), DW (double word), TW (triple word). Bonuses apply only to newly placed tiles.
+                <strong>Use bonus squares</strong> to score more: DL, TL, DW, and TW only count on newly placed tiles.
               </li>
               <li>
-                You have <strong>3 attempts</strong>. Try to find the top play, and if you hit it on your first try, the puzzle ends immediately.
+                You get <strong>3 attempts</strong> to find the strongest play.
               </li>
               <li>
-                On <strong>mobile</strong>, drag tiles by touch or tap a tile then tap a board square.
+                On <strong>mobile</strong>, drag tiles or tap a tile and then tap a square.
               </li>
             </ul>
             <button
