@@ -1507,8 +1507,13 @@ export default function Home() {
     const allSameRow = placedTiles.every(
       (tile) => tile.row === placedTiles[0].row
     )
+    const allSameCol = placedTiles.every(
+      (tile) => tile.col === placedTiles[0].col
+    )
 
-    return allSameRow ? "row" : "col"
+    if (allSameRow) return "row"
+    if (allSameCol) return "col"
+    return null
   }
 
   function isMoveContinuous(direction: "row" | "col") {
@@ -1759,7 +1764,12 @@ export default function Home() {
     const wordsFormed = getAllWordPreviews()
     const moveDirection = getMoveDirection()
 
-    if (moveDirection && !isMoveContinuous(moveDirection)) {
+    if (!moveDirection) {
+      setMessage("Your tiles must stay in one row or one column.")
+      return
+    }
+
+    if (!isMoveContinuous(moveDirection)) {
       setMessage("Your tiles must make one continuous line.")
       return
     }
