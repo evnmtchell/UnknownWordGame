@@ -2370,11 +2370,18 @@ export default function Home() {
       return
     }
 
-    const timeoutId = window.setTimeout(() => {
+    const showTimeoutId = window.setTimeout(() => {
       setShowShuffleNudge(true)
     }, 10000)
 
-    return () => window.clearTimeout(timeoutId)
+    const hideTimeoutId = window.setTimeout(() => {
+      setShowShuffleNudge(false)
+    }, 13000)
+
+    return () => {
+      window.clearTimeout(showTimeoutId)
+      window.clearTimeout(hideTimeoutId)
+    }
   }, [lastPlayerActivityAt, viewMode, gameOver, attemptsLeft, showMoreActions])
 
   useEffect(() => {
@@ -4696,6 +4703,11 @@ export default function Home() {
                       touchAction: "none",
                       WebkitUserSelect: "none",
                       userSelect: "none",
+                      zIndex:
+                        (isLiveScoreAnchor && liveScoreTotal !== null) ||
+                        validWordHighlightCells.has(getBoardCellKey(row, col))
+                          ? 7
+                          : 1,
                       animation:
                         reducedMotionEnabled
                           ? undefined
@@ -4725,7 +4737,7 @@ export default function Home() {
                           position: "absolute",
                           inset: 0,
                           pointerEvents: "none",
-                          zIndex: 2,
+                          zIndex: 8,
                         }}
                       >
                         {validWordOutline.top && (
@@ -4897,7 +4909,7 @@ export default function Home() {
                             ? "0 5px 10px rgba(71, 117, 20, 0.18)"
                             : "0 5px 10px rgba(136, 82, 16, 0.16)",
                           border: "2px solid rgba(255,255,255,0.72)",
-                          zIndex: 4,
+                          zIndex: 9,
                         }}
                         title={
                           isLiveScorePreviewValid
@@ -5863,31 +5875,43 @@ export default function Home() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
                 gap: "6px",
               }}
             >
-              {"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letter) => (
-                <button
-                  key={letter}
-                  onClick={() => handleBlankLetterChoice(letter)}
+              {["ABCDEFG", "HIJKLMN", "OPQRSTU", "VWXYZ"].map((rowLetters) => (
+                <div
+                  key={rowLetters}
                   style={{
-                    width: "100%",
-                    aspectRatio: "1 / 1",
-                    borderRadius: "8px",
-                    border: "2px solid rgba(123, 98, 65, 0.82)",
-                    background:
-                      "linear-gradient(180deg, rgba(240,220,171,0.98) 0%, rgba(228,202,140,0.98) 100%)",
-                    color: "#2f2419",
-                    fontSize: isCompactMobile ? "18px" : "19px",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    boxShadow:
-                      "inset 0 1px 0 rgba(255,255,255,0.42), 0 4px 10px rgba(53, 39, 19, 0.14)",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                    gap: "6px",
                   }}
                 >
-                  {letter}
-                </button>
+                  {rowLetters === "VWXYZ" && <div aria-hidden="true" />}
+                  {rowLetters.split("").map((letter) => (
+                    <button
+                      key={letter}
+                      onClick={() => handleBlankLetterChoice(letter)}
+                      style={{
+                        width: "100%",
+                        aspectRatio: "1 / 1",
+                        borderRadius: "8px",
+                        border: "2px solid rgba(123, 98, 65, 0.82)",
+                        background:
+                          "linear-gradient(180deg, rgba(240,220,171,0.98) 0%, rgba(228,202,140,0.98) 100%)",
+                        color: "#2f2419",
+                        fontSize: isCompactMobile ? "18px" : "19px",
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        boxShadow:
+                          "inset 0 1px 0 rgba(255,255,255,0.42), 0 4px 10px rgba(53, 39, 19, 0.14)",
+                      }}
+                    >
+                      {letter}
+                    </button>
+                  ))}
+                  {rowLetters === "VWXYZ" && <div aria-hidden="true" />}
+                </div>
               ))}
             </div>
           </div>
