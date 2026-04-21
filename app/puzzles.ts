@@ -25,7 +25,7 @@ export type DailyPuzzle = {
   optimalWords: string[]
 }
 
-export type PuzzleMode = "easy" | "hard"
+export type PuzzleMode = "mini" | "easy" | "hard"
 
 function getStartingWordRuns(filledCells: PuzzleCell[]) {
   const occupied = new Map(filledCells.map((cell) => [`${cell.row},${cell.col}`, cell]))
@@ -278,6 +278,7 @@ type EasySlot = {
 }
 
 const HARD_BOARD_SIZE = 11
+const MINI_BOARD_SIZE = 5
 const EASY_BOARD_SIZE = 7
 const FUTURE_EASY_REBUILD_START = "2026-04-18"
 
@@ -288,6 +289,68 @@ type HardTransform = {
 type EasyTransform = {
   transpose?: boolean
 }
+
+type MiniSlot = {
+  direction: "across" | "down"
+  row: number
+  col: number
+  word: string
+}
+
+type MiniTransform = {
+  transpose?: boolean
+}
+
+const miniModeBonusCells: BonusCell[] = [
+  { row: 0, col: 0, type: "TW" },
+  { row: 0, col: 4, type: "TW" },
+  { row: 4, col: 0, type: "TW" },
+  { row: 4, col: 4, type: "TW" },
+  { row: 1, col: 1, type: "DW" },
+  { row: 1, col: 3, type: "DW" },
+  { row: 2, col: 2, type: "TL" },
+  { row: 3, col: 1, type: "DW" },
+  { row: 3, col: 3, type: "DW" },
+  { row: 0, col: 2, type: "DL" },
+  { row: 2, col: 0, type: "DL" },
+  { row: 2, col: 4, type: "DL" },
+  { row: 4, col: 2, type: "DL" },
+]
+
+const miniModeBlueprints: MiniSlot[][] = [
+  [
+    { direction: "across", row: 2, col: 0, word: "PLANE" },
+    { direction: "down", row: 0, col: 1, word: "ISLE" },
+    { direction: "down", row: 1, col: 3, word: "ANT" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "CLOUD" },
+    { direction: "down", row: 0, col: 1, word: "ISLE" },
+    { direction: "down", row: 1, col: 3, word: "MUG" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "SMILE" },
+    { direction: "down", row: 0, col: 0, word: "GAS" },
+    { direction: "down", row: 1, col: 2, word: "PIN" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "WATER" },
+    { direction: "down", row: 0, col: 2, word: "ACTOR" },
+    { direction: "down", row: 1, col: 4, word: "ORB" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "GLOVE" },
+    { direction: "down", row: 0, col: 1, word: "ISLE" },
+    { direction: "down", row: 1, col: 3, word: "IVY" },
+  ],
+  [
+    { direction: "across", row: 2, col: 0, word: "FABLE" },
+    { direction: "down", row: 0, col: 2, word: "CAB" },
+    { direction: "down", row: 1, col: 4, word: "PEA" },
+  ],
+]
+
+const miniModeTransforms: MiniTransform[] = [{}, { transpose: true }]
 
 const hardModeBlueprints: HardSlot[][] = [
   [
@@ -427,6 +490,25 @@ function transformEasySlot(slot: EasySlot, transform: EasyTransform) {
   return transformed
 }
 
+function transposeMiniSlot(slot: MiniSlot): MiniSlot {
+  return {
+    ...slot,
+    direction: slot.direction === "across" ? "down" : "across",
+    row: slot.col,
+    col: slot.row,
+  }
+}
+
+function transformMiniSlot(slot: MiniSlot, transform: MiniTransform) {
+  let transformed = { ...slot }
+
+  if (transform.transpose) {
+    transformed = transposeMiniSlot(transformed)
+  }
+
+  return transformed
+}
+
 function buildHardLayout(slots: HardSlot[], transform: HardTransform = {}) {
   const cells = new Map<string, PuzzleCell>()
 
@@ -471,6 +553,28 @@ function buildEasyLayout(slots: EasySlot[], transform: EasyTransform = {}) {
   return Array.from(cells.values())
 }
 
+function buildMiniLayout(slots: MiniSlot[], transform: MiniTransform = {}) {
+  const cells = new Map<string, PuzzleCell>()
+
+  for (const slot of slots.map((item) => transformMiniSlot(item, transform))) {
+    for (let index = 0; index < slot.word.length; index++) {
+      const row = slot.direction === "across" ? slot.row : slot.row + index
+      const col = slot.direction === "across" ? slot.col + index : slot.col
+      const key = `${row},${col}`
+      const letter = slot.word[index]
+      const existing = cells.get(key)
+
+      if (existing && existing.letter !== letter) {
+        throw new Error(`Mini layout conflict at ${key}.`)
+      }
+
+      cells.set(key, { row, col, letter })
+    }
+  }
+
+  return Array.from(cells.values())
+}
+
 function getHardModeLayoutForDate(date: string) {
   const random = createSeededRandom(`hard-${date}`)
   const slotLayout = hardModeBlueprints[Math.floor(random() * hardModeBlueprints.length)]
@@ -501,6 +605,21 @@ function getGeneratedEasyLayoutForDate(date: string) {
   for (const cell of transformedLayout) {
     if (cell.row < 0 || cell.row >= EASY_BOARD_SIZE || cell.col < 0 || cell.col >= EASY_BOARD_SIZE) {
       throw new Error(`Generated easy puzzle for ${date} produced out-of-bounds cell.`)
+    }
+  }
+
+  return transformedLayout
+}
+
+function getMiniModeLayoutForDate(date: string) {
+  const random = createSeededRandom(`mini-${date}`)
+  const slotLayout = miniModeBlueprints[Math.floor(random() * miniModeBlueprints.length)]
+  const transform = miniModeTransforms[Math.floor(random() * miniModeTransforms.length)]
+  const transformedLayout = buildMiniLayout(slotLayout, transform)
+
+  for (const cell of transformedLayout) {
+    if (cell.row < 0 || cell.row >= MINI_BOARD_SIZE || cell.col < 0 || cell.col >= MINI_BOARD_SIZE) {
+      throw new Error(`Generated mini puzzle for ${date} produced out-of-bounds cell.`)
     }
   }
 
@@ -547,6 +666,31 @@ function validateEasyBlueprints() {
           bonusCells: defaultBonusCells,
           optimalScore: 0,
           optimalWords: [],
+        }
+      )
+    }
+  }
+}
+
+function validateMiniBlueprints() {
+  for (const [blueprintIndex, blueprint] of miniModeBlueprints.entries()) {
+    for (const [transformIndex, transform] of miniModeTransforms.entries()) {
+      validatePuzzleLayout(
+        {
+          id: `mini-blueprint-${blueprintIndex + 1}-transform-${transformIndex + 1}`,
+          date: "0000-00-00",
+          boardSize: MINI_BOARD_SIZE,
+          rack: [],
+          filledCells: buildMiniLayout(blueprint, transform),
+          bonusCells: miniModeBonusCells,
+          optimalScore: 0,
+          optimalWords: [],
+        },
+        {
+          minWords: 2,
+          maxWords: 3,
+          minLength: 3,
+          maxLength: 5,
         }
       )
     }
@@ -1231,10 +1375,30 @@ for (const puzzle of DAILY_PUZZLES) {
 
 validateEasyBlueprints()
 validateHardBlueprints()
+validateMiniBlueprints()
 
 export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
   const easyPuzzle = DAILY_PUZZLES.find((puzzle) => puzzle.date === date) || DAILY_PUZZLES[0]
-  const generatedRack = generateRackForSeed(easyPuzzle.rack.length, `${date}-${mode}-rack`)
+  const generatedRack = generateRackForSeed(mode === "mini" ? 5 : easyPuzzle.rack.length, `${date}-${mode}-rack`)
+
+  if (mode === "mini") {
+    const miniPuzzle: DailyPuzzle = {
+      ...easyPuzzle,
+      id: `${easyPuzzle.id}-mini`,
+      boardSize: MINI_BOARD_SIZE,
+      rack: generatedRack,
+      filledCells: getMiniModeLayoutForDate(date),
+      bonusCells: miniModeBonusCells,
+    }
+
+    validatePuzzleLayout(miniPuzzle, {
+      minWords: 2,
+      maxWords: 3,
+      minLength: 3,
+      maxLength: 5,
+    })
+    return miniPuzzle
+  }
 
   if (mode === "easy") {
     return {

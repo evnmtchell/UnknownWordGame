@@ -92,9 +92,11 @@ type GameStats = {
 
 type UiFeedbackKind = "submit" | "hint" | "recall" | "win"
 
+type PuzzleModeName = "mini" | "easy" | "hard"
+
 type PuzzleAnalyticsRecord = {
   date: string
-  mode: "easy" | "hard"
+  mode: PuzzleModeName
   bestScore: number
   optimalScore: number
   scorePercent: number
@@ -104,6 +106,7 @@ type PuzzleAnalyticsRecord = {
 }
 
 type ArchiveCompletionStatus = {
+  mini: boolean
   easy: boolean
   hard: boolean
 }
@@ -123,7 +126,6 @@ const defaultStats: GameStats = {
 const STATS_KEY = "daily-word-game-stats"
 const SOUND_MUTED_KEY = "daily-word-game-sound-muted"
 const HAPTICS_ENABLED_KEY = "daily-word-game-haptics-enabled"
-const REDUCED_MOTION_KEY = "daily-word-game-reduced-motion"
 const NIGHT_MODE_KEY = "daily-word-game-night-mode"
 const FUTURE_PUZZLE_TEST_MODE_KEY = "daily-word-game-future-puzzle-test-mode"
 const HOME_BRAND_TILES = ["L", "E", "X", "I", "C", "O", "N"]
@@ -288,8 +290,8 @@ export default function Home() {
   const todayDate = useMemo(() => getLocalDateString(), [])
   const todayDisplayDate = useMemo(() => formatDisplayDate(todayDate), [todayDate])
   const [selectedDate, setSelectedDate] = useState(todayDate)
-  const [selectedMode, setSelectedMode] = useState<"easy" | "hard">("easy")
-  const [loadedGameConfig, setLoadedGameConfig] = useState<{ date: string; mode: "easy" | "hard" }>({
+  const [selectedMode, setSelectedMode] = useState<"mini" | "easy">("easy")
+  const [loadedGameConfig, setLoadedGameConfig] = useState<{ date: string; mode: "mini" | "easy" }>({
     date: todayDate,
     mode: "easy",
   })
@@ -340,10 +342,11 @@ export default function Home() {
   const boardSize = puzzle.boardSize
   const maxAttempts = 3
   const startingRack = puzzle.rack
-  const activeGameMode = loadedGameConfig.mode
+  const isDesktopHardMode = false
   const storageKey = `daily-word-game-${puzzle.date}-${loadedGameConfig.mode}`
   const boardGap = isCompactMobile ? 3 : 4
   const compactBoardShellPadding = isCompactMobile ? 6 : 14
+  const desktopBoardShellPadding = isDesktopHardMode ? 10 : 14
   const compactRackGapWidth = 2
   const compactBoardAvailableWidth =
     isCompactMobile && viewportSize.width > 0
@@ -352,14 +355,44 @@ export default function Home() {
   const compactBoardCellSize =
     isCompactMobile && compactBoardAvailableWidth > 0
       ? Math.max(
-          activeGameMode === "hard" ? 29 : 34,
+          34,
           Math.min(
-            activeGameMode === "hard" ? 40 : 46,
+            46,
             Math.floor((compactBoardAvailableWidth - (boardSize - 1) * boardGap) / boardSize)
           )
         )
       : 46
-  const boardCellSize = isCompactMobile ? compactBoardCellSize : 54
+  const desktopHardShellHeightBudget =
+    isDesktopHardMode && viewportSize.width > 0 && viewportSize.height > 0
+      ? Math.max(
+          440,
+          viewportSize.height - 210
+        )
+      : 0
+  const desktopHardRackSectionHeight = isDesktopHardMode ? 132 : 0
+  const desktopHardBoardAvailableSize =
+    isDesktopHardMode && desktopHardShellHeightBudget > 0
+      ? Math.max(
+          360,
+          Math.min(
+            viewportSize.width - 220,
+            desktopHardShellHeightBudget - desktopHardRackSectionHeight - desktopBoardShellPadding * 2
+          )
+        )
+      : 0
+  const desktopHardBoardCellSize =
+    isDesktopHardMode && desktopHardBoardAvailableSize > 0
+      ? Math.max(
+          32,
+          Math.min(
+            44,
+            Math.floor(
+              (desktopHardBoardAvailableSize - (boardSize - 1) * boardGap) / boardSize
+            )
+          )
+        )
+      : 54
+  const boardCellSize = isCompactMobile ? compactBoardCellSize : desktopHardBoardCellSize
   const compactRackTileSize =
     isCompactMobile && viewportSize.width > 0
       ? Math.max(
@@ -373,21 +406,36 @@ export default function Home() {
           )
         )
       : 46
-  const rackTileSize = isCompactMobile ? compactRackTileSize : 56
-  const actionButtonMinHeight = isCompactMobile ? 42 : 54
+  const rackTileSize = isCompactMobile ? compactRackTileSize : isDesktopHardMode ? 42 : 56
+  const actionButtonMinHeight = isCompactMobile ? 42 : isDesktopHardMode ? 42 : 54
   const boardMaxWidth = `${boardSize * boardCellSize + (boardSize - 1) * boardGap}px`
   const compactViewportWidth = Math.max(0, viewportSize.width - 16)
   const compactViewportHeightBudget = Math.max(
     0,
-    viewportSize.height - (activeGameMode === "hard" ? 266 : 238)
+    viewportSize.height - 238
   )
   const compactPuzzleFrameWidth =
     isCompactMobile && compactViewportWidth > 0
-      ? Math.max(260, Math.min(compactViewportWidth, compactViewportHeightBudget || compactViewportWidth))
+      ? Math.max(
+          260,
+          Math.min(compactViewportWidth, compactViewportHeightBudget || compactViewportWidth)
+        )
       : null
-  const boardTileFontSize = isCompactMobile ? "clamp(16px, 4.8vw, 20px)" : "clamp(18px, 5vw, 24px)"
-  const boardBonusFontSize = isCompactMobile ? "clamp(7px, 2vw, 9px)" : "clamp(8px, 2.4vw, 11px)"
-  const boardScoreFontSize = isCompactMobile ? "clamp(7px, 1.8vw, 9px)" : "clamp(8px, 2vw, 10px)"
+  const boardTileFontSize = isCompactMobile
+    ? "clamp(16px, 4.8vw, 20px)"
+    : isDesktopHardMode
+    ? "clamp(16px, 3vw, 21px)"
+    : "clamp(18px, 5vw, 24px)"
+  const boardBonusFontSize = isCompactMobile
+    ? "clamp(7px, 2vw, 9px)"
+    : isDesktopHardMode
+    ? "clamp(7px, 1.6vw, 10px)"
+    : "clamp(8px, 2.4vw, 11px)"
+  const boardScoreFontSize = isCompactMobile
+    ? "clamp(7px, 1.8vw, 9px)"
+    : isDesktopHardMode
+    ? "clamp(4px, 0.75vw, 6px)"
+    : "clamp(8px, 2vw, 10px)"
   const validWordOutlineColor = "#72ad2d"
   const validWordOutlineThickness = isCompactMobile ? 5 : 6
   const validWordOutlineInset = -4
@@ -424,7 +472,6 @@ export default function Home() {
   const [uiFeedback, setUiFeedback] = useState<{ kind: UiFeedbackKind; tick: number } | null>(null)
   const [soundMuted, setSoundMuted] = useState(false)
   const [hapticsEnabled, setHapticsEnabled] = useState(true)
-  const [reducedMotionEnabled, setReducedMotionEnabled] = useState(false)
   const [nightModeEnabled, setNightModeEnabled] = useState(false)
   const [futurePuzzleTestMode, setFuturePuzzleTestMode] = useState(false)
   const [hasSavedTodayGame, setHasSavedTodayGame] = useState(false)
@@ -439,6 +486,11 @@ export default function Home() {
   const [authError, setAuthError] = useState("")
   const [authLoading, setAuthLoading] = useState(false)
   const [currentUser, setCurrentUser] = useState<{ username: string; anon: boolean } | null>(null)
+  const reducedMotionEnabled =
+    hasMounted &&
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
   const fixedCellsMap = useMemo(
     () => new Map(puzzle.filledCells.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.letter])),
     [puzzle.filledCells]
@@ -455,6 +507,18 @@ export default function Home() {
     if (fullSolutionRef.current) return fullSolutionRef.current
     const solved = solvePuzzle(puzzle)
     fullSolutionRef.current = solved
+    return solved
+  }
+
+  function syncPuzzleOptimalWithFullSolution() {
+    const solved = getFullSolution()
+    const scoreMatches = solved.bestScore === solution.bestScore
+    const wordsMatch = solved.bestWords.join("|") === solution.bestWords.join("|")
+
+    if (!scoreMatches || !wordsMatch) {
+      setPuzzleOptimal({ score: solved.bestScore, words: solved.bestWords })
+    }
+
     return solved
   }
   const optimalCellSet = useMemo(() => {
@@ -675,21 +739,6 @@ export default function Home() {
     }
 
     try {
-      const savedReducedMotion = localStorage.getItem(REDUCED_MOTION_KEY)
-      if (savedReducedMotion === null) {
-        setReducedMotionEnabled(
-          typeof window !== "undefined" &&
-            typeof window.matchMedia === "function" &&
-            window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        )
-      } else {
-        setReducedMotionEnabled(savedReducedMotion === "1")
-      }
-    } catch {
-      // ignore
-    }
-
-    try {
       const savedNightMode = localStorage.getItem(NIGHT_MODE_KEY)
       if (savedNightMode === null) {
         setNightModeEnabled(
@@ -711,7 +760,10 @@ export default function Home() {
     }
 
     try {
-      setHasSavedTodayGame(Boolean(localStorage.getItem(`daily-word-game-${todayDate}`)))
+      setHasSavedTodayGame(
+        Boolean(localStorage.getItem(`daily-word-game-${todayDate}-mini`)) ||
+          Boolean(localStorage.getItem(`daily-word-game-${todayDate}-easy`))
+      )
     } catch {
       // ignore
     }
@@ -735,14 +787,6 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(REDUCED_MOTION_KEY, reducedMotionEnabled ? "1" : "0")
-    } catch {
-      // ignore
-    }
-  }, [reducedMotionEnabled])
-
-  useEffect(() => {
-    try {
       localStorage.setItem(NIGHT_MODE_KEY, nightModeEnabled ? "1" : "0")
     } catch {
       // ignore
@@ -763,7 +807,10 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      setHasSavedTodayGame(Boolean(localStorage.getItem(`daily-word-game-${todayDate}`)))
+      setHasSavedTodayGame(
+        Boolean(localStorage.getItem(`daily-word-game-${todayDate}-mini`)) ||
+          Boolean(localStorage.getItem(`daily-word-game-${todayDate}-easy`))
+      )
     } catch {
       // ignore
     }
@@ -783,7 +830,7 @@ export default function Home() {
       const completionMap: Record<string, ArchiveCompletionStatus> = {}
 
       for (const puzzleEntry of DAILY_PUZZLES) {
-        for (const mode of ["easy", "hard"] as const) {
+        for (const mode of ["mini", "easy"] as const) {
           const saved = localStorage.getItem(`daily-word-game-${puzzleEntry.date}-${mode}`)
           if (!saved) continue
 
@@ -791,6 +838,7 @@ export default function Home() {
             const parsed = JSON.parse(saved) as Partial<SavedGameState>
             if (parsed.attemptsLeft === 0) {
               const currentStatus = completionMap[puzzleEntry.date] ?? {
+                mini: false,
                 easy: false,
                 hard: false,
               }
@@ -807,12 +855,13 @@ export default function Home() {
 
       if (attemptsLeft === 0) {
         const currentStatus = completionMap[selectedDate] ?? {
+          mini: false,
           easy: false,
           hard: false,
         }
         completionMap[selectedDate] = {
           ...currentStatus,
-          [activeGameMode]: true,
+          [loadedGameConfig.mode]: true,
         }
       }
 
@@ -1063,44 +1112,6 @@ export default function Home() {
     reorderRackTile(activeDraggedTile.index, targetIndex)
   }
 
-  function isPlacementAllowed(row: number, col: number) {
-    if (placedTiles.length === 0) return true
-    if (placedTiles.length === 1) {
-      return row === placedTiles[0].row || col === placedTiles[0].col
-    }
-
-    const allSameRow = placedTiles.every(
-      (tile) => tile.row === placedTiles[0].row
-    )
-    const allSameCol = placedTiles.every(
-      (tile) => tile.col === placedTiles[0].col
-    )
-
-    if (allSameRow) return row === placedTiles[0].row
-    if (allSameCol) return col === placedTiles[0].col
-
-    return false
-  }
-
-  function isPlacementAllowedWithTiles(
-    tiles: PlacedTile[],
-    row: number,
-    col: number
-  ) {
-    if (tiles.length === 0) return true
-    if (tiles.length === 1) {
-      return row === tiles[0].row || col === tiles[0].col
-    }
-
-    const allSameRow = tiles.every((tile) => tile.row === tiles[0].row)
-    const allSameCol = tiles.every((tile) => tile.col === tiles[0].col)
-
-    if (allSameRow) return row === tiles[0].row
-    if (allSameCol) return col === tiles[0].col
-
-    return false
-  }
-
   function placeTileOnBoard(tileData: TileSelection, row: number, col: number) {
     if (attemptsLeft === 0) {
       setMessage("No attempts left.")
@@ -1114,11 +1125,6 @@ export default function Home() {
 
     if (getCellLetter(row, col)) {
       setMessage("That square is already occupied.")
-      return
-    }
-
-    if (!isPlacementAllowed(row, col)) {
-      setMessage("Your tiles must stay in one row or one column.")
       return
     }
 
@@ -1140,7 +1146,7 @@ export default function Home() {
     setMessage(
       tileData.isBlank
         ? `Blank tile placed as ${resolvedLetter}.`
-        : "Good move. Keep placing tiles in one line."
+        : "Tile placed. Keep building your move."
     )
   }
 
@@ -1161,11 +1167,6 @@ export default function Home() {
       (placed) => !(placed.row === tile.row && placed.col === tile.col)
     )
 
-    if (!isPlacementAllowedWithTiles(remainingTiles, row, col)) {
-      setMessage("Your tiles must stay in one row or one column.")
-      return
-    }
-
     setPlacedTiles([
       ...remainingTiles,
       { row, col, letter: tile.letter, isBlank: tile.isBlank, rackIndex: tile.rackIndex },
@@ -1179,6 +1180,39 @@ export default function Home() {
   }
 
   function handleCellClick(row: number, col: number) {
+    const placedTile = getPlacedTile(row, col)
+
+    if (draggedPlacedTile) {
+      if (draggedPlacedTile.row === row && draggedPlacedTile.col === col) {
+        draggedPlacedTileRef.current = null
+        setDraggedPlacedTile(null)
+        setMessage("Tile returned to its spot.")
+        return
+      }
+
+      movePlacedTileOnBoard(draggedPlacedTile, row, col)
+      return
+    }
+
+    if (placedTile && !gameOver) {
+      const selectedPlacedTile = {
+        row,
+        col,
+        letter: placedTile.letter,
+        isBlank: placedTile.isBlank,
+        rackIndex: placedTile.rackIndex,
+      }
+      draggedPlacedTileRef.current = selectedPlacedTile
+      setDraggedPlacedTile(selectedPlacedTile)
+      setSelectedTile(null)
+      setMessage(
+        placedTile.isBlank
+          ? `Blank tile (${placedTile.letter}) selected. Tap a new square to move it.`
+          : `${placedTile.letter} selected. Tap a new square to move it.`
+      )
+      return
+    }
+
     if (!selectedTile) {
       setMessage("First click a tile from your rack, or drag one onto the board.")
       return
@@ -1560,7 +1594,9 @@ export default function Home() {
     const totalScore = wordsFormed.reduce((sum, item) => sum + item.score, 0)
     const wordResults = wordsFormed.map(({ word, score }) => ({ word, score }))
     const placementSnapshot = placedTiles.map((tile) => ({ ...tile }))
-    const solvedOptimally = totalScore >= solution.bestScore
+    const solutionForSubmit =
+      totalScore > solution.bestScore ? syncPuzzleOptimalWithFullSolution() : solution
+    const solvedOptimally = totalScore >= solutionForSubmit.bestScore
     const solvedOptimallyOnFirstTry = attemptHistory.length === 0 && solvedOptimally
     const newAttemptsLeft = solvedOptimally ? 0 : attemptsLeft - 1
     const newBestScore = Math.max(bestScore, totalScore)
@@ -1587,23 +1623,23 @@ export default function Home() {
 
     if (newAttemptsLeft === 0) {
       const rating =
-        solution.bestScore <= 0
+        solutionForSubmit.bestScore <= 0
           ? "Keep trying"
-          : newBestScore / solution.bestScore >= 1
+          : newBestScore / solutionForSubmit.bestScore >= 1
           ? "Perfect"
-          : newBestScore / solution.bestScore >= 0.9
+          : newBestScore / solutionForSubmit.bestScore >= 0.9
           ? "Excellent"
-          : newBestScore / solution.bestScore >= 0.75
+          : newBestScore / solutionForSubmit.bestScore >= 0.75
           ? "Great"
-          : newBestScore / solution.bestScore >= 0.5
+          : newBestScore / solutionForSubmit.bestScore >= 0.5
           ? "Solid"
           : "Keep trying"
       updateStats(rating, {
         date: puzzle.date,
-        mode: activeGameMode,
+        mode: loadedGameConfig.mode,
         bestScore: newBestScore,
-        optimalScore: solution.bestScore,
-        scorePercent: solution.bestScore > 0 ? newBestScore / solution.bestScore : 0,
+        optimalScore: solutionForSubmit.bestScore,
+        scorePercent: solutionForSubmit.bestScore > 0 ? newBestScore / solutionForSubmit.bestScore : 0,
         attemptsUsed: attemptHistory.length + 1,
         hintsUsed: hintLevel,
         rating,
@@ -1620,11 +1656,11 @@ export default function Home() {
     // Save to DB directly on submit
     const updatedHistory = [...attemptHistory, newAttempt]
     const sessionRating = newAttemptsLeft === 0
-      ? (solution.bestScore <= 0 ? "Keep trying"
-        : newBestScore / solution.bestScore >= 1 ? "Perfect"
-        : newBestScore / solution.bestScore >= 0.9 ? "Excellent"
-        : newBestScore / solution.bestScore >= 0.75 ? "Great"
-        : newBestScore / solution.bestScore >= 0.5 ? "Solid"
+      ? (solutionForSubmit.bestScore <= 0 ? "Keep trying"
+        : newBestScore / solutionForSubmit.bestScore >= 1 ? "Perfect"
+        : newBestScore / solutionForSubmit.bestScore >= 0.9 ? "Excellent"
+        : newBestScore / solutionForSubmit.bestScore >= 0.75 ? "Great"
+        : newBestScore / solutionForSubmit.bestScore >= 0.5 ? "Solid"
         : "Keep trying")
       : null
     saveSession({
@@ -1653,6 +1689,52 @@ export default function Home() {
     triggerAppHapticFeedback(8)
     triggerUiFeedback("recall")
     setMessage("Board cleared. Start a new move.")
+  }
+
+  function resetCurrentPuzzle() {
+    const freshPuzzle = getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode)
+
+    try {
+      localStorage.removeItem(storageKey)
+    } catch {
+      // ignore
+    }
+
+    setRack(freshPuzzle.rack)
+    setPlacedTiles([])
+    setSelectedTile(null)
+    setDraggedTile(null)
+    setDraggedPlacedTile(null)
+    setRackDropIndex(null)
+    setSubmittedWords([])
+    setSubmittedScore(0)
+    setAttemptsLeft(maxAttempts)
+    setBestScore(0)
+    setAttemptHistory([])
+    setHintLevel(0)
+    setShowHint(false)
+    setShowMoreActions(false)
+    setShowPuzzleReview(false)
+    setShowResultsModal(false)
+    setRecentPlacementKey(null)
+    setMessage("Puzzle reset. Start a new run.")
+    statsUpdatedRef.current = false
+    initialLoadDone.current = false
+
+    saveSession({
+      date: puzzle.date,
+      mode: loadedGameConfig.mode,
+      attempts_left: maxAttempts,
+      best_score: 0,
+      attempt_history: [],
+      hint_used: false,
+      hint_level: 0,
+      completed: false,
+      rating: null,
+      submitted_words: [],
+      submitted_score: 0,
+      message: "Puzzle reset. Start a new run.",
+    })
   }
 
   function updateStats(rating: string, analyticsRecord: PuzzleAnalyticsRecord) {
@@ -1752,7 +1834,7 @@ export default function Home() {
     setShowAuth(false)
   }
 
-  function selectPuzzleDate(date: string, mode: "easy" | "hard" = selectedMode) {
+  function selectPuzzleDate(date: string, mode: "mini" | "easy" = selectedMode) {
     const newPuzzle = getPuzzleByDate(date, mode)
     setPuzzleOptimal(null)
     fullSolutionRef.current = null
@@ -2061,6 +2143,18 @@ export default function Home() {
     }
   }, [gameOver])
 
+  useEffect(() => {
+    if (!gameOver) return
+
+    const solved = getFullSolution()
+    const scoreMatches = solved.bestScore === solution.bestScore
+    const wordsMatch = solved.bestWords.join("|") === solution.bestWords.join("|")
+
+    if (!scoreMatches || !wordsMatch) {
+      setPuzzleOptimal({ score: solved.bestScore, words: solved.bestWords })
+    }
+  }, [gameOver, puzzle, solution.bestScore, solution.bestWords])
+
   function getRating() {
     if (solution.bestScore <= 0) return ""
     const percent = bestScore / solution.bestScore
@@ -2114,11 +2208,6 @@ export default function Home() {
     }
 
     if (getCellLetter(nextHintTile.row, nextHintTile.col)) {
-      setMessage("Clear your current move before using the second hint.")
-      return
-    }
-
-    if (!isPlacementAllowed(nextHintTile.row, nextHintTile.col)) {
       setMessage("Clear your current move before using the second hint.")
       return
     }
@@ -2178,16 +2267,17 @@ export default function Home() {
 
   async function shareResults() {
     const header =
-      activeGameMode === "hard"
-        ? `Lexicon Hard ${formatDisplayDate(puzzle.date)}`
+      loadedGameConfig.mode === "mini"
+        ? `Lexicon Mini ${formatDisplayDate(puzzle.date)}`
         : `Lexicon ${formatDisplayDate(puzzle.date)}`
+    const rating = getRating()
     const summary = isPerfectFirstTryRun()
-      ? activeGameMode === "hard"
-        ? `Perfect hard first try: ${bestScore}/${solution.bestScore}`
-        : `Perfect first try: ${bestScore}/${solution.bestScore}`
-      : activeGameMode === "hard"
-        ? `Hard Mode Score: ${bestScore}/${solution.bestScore}`
-        : `Best Score: ${bestScore}/${solution.bestScore}`
+      ? loadedGameConfig.mode === "mini"
+        ? "Perfect mini first try"
+        : "Perfect first try"
+      : loadedGameConfig.mode === "mini"
+        ? `Mini: ${rating || "Keep trying"}`
+        : rating || "Keep trying"
     const hintSummary = getHintStatusText()
     const lines = attemptHistory.map((attempt, index) => {
       const icon = getShareIcon(attempt.totalScore)
@@ -2195,7 +2285,7 @@ export default function Home() {
     })
 
     // Generate tracked share link
-    const refCode = await createShareLink(puzzle.date, activeGameMode, bestScore)
+    const refCode = await createShareLink(puzzle.date, loadedGameConfig.mode, bestScore)
     const shareUrl = refCode
       ? `https://dinkdaddy.org?ref=${refCode}`
       : "https://dinkdaddy.org"
@@ -2250,12 +2340,11 @@ export default function Home() {
       ),
     [validWordPreviews]
   )
-  const showLiveScorePreview =
-    placedTiles.length > 0 &&
-    isTouchingFilledCells() &&
-    allWordPreviews.length > 0 &&
-    validWordPreviews.length === allWordPreviews.length
-  const liveScoreAnchorCell = showLiveScorePreview
+  const canShowLiveScorePreview =
+    placedTiles.length > 0 && isTouchingFilledCells() && allWordPreviews.length > 0
+  const isLiveScorePreviewValid =
+    canShowLiveScorePreview && validWordPreviews.length === allWordPreviews.length
+  const liveScoreAnchorCell = canShowLiveScorePreview
     ? (() => {
         const mainPreview = allWordPreviews[0]
         if (!mainPreview) return null
@@ -2264,7 +2353,7 @@ export default function Home() {
           : mainPreview.cells.reduce((best, cell) => (cell.row > best.row ? cell : best))
       })()
     : null
-  const liveScoreTotal = showLiveScorePreview
+  const liveScoreTotal = canShowLiveScorePreview
     ? allWordPreviews.reduce((sum, preview) => sum + preview.score, 0)
     : null
   const homeActionButtonStyle: React.CSSProperties = {
@@ -2280,113 +2369,97 @@ export default function Home() {
     boxShadow: "0 10px 24px rgba(78, 56, 28, 0.08)",
   }
   const analyticsRecords = stats.puzzleHistory ?? []
-  const averageScorePercent =
-    analyticsRecords.length > 0
-      ? Math.round(
-          (analyticsRecords.reduce((sum, record) => sum + record.scorePercent, 0) /
-            analyticsRecords.length) *
-            100
-        )
-      : 0
-  const averageAttemptsUsed =
-    analyticsRecords.length > 0
-      ? (
-          analyticsRecords.reduce((sum, record) => sum + record.attemptsUsed, 0) /
-          analyticsRecords.length
-        ).toFixed(1)
-      : "0.0"
-  const hintUsageRate =
-    analyticsRecords.length > 0
-      ? Math.round(
-          (analyticsRecords.filter((record) => record.hintsUsed > 0).length / analyticsRecords.length) * 100
-        )
-      : 0
-  const hardGamesPlayed = analyticsRecords.filter((record) => record.mode === "hard").length
-  const perfectRate =
-    analyticsRecords.length > 0
-      ? Math.round(
-          (analyticsRecords.filter((record) => record.rating === "Perfect").length / analyticsRecords.length) *
-            100
-        )
-      : 0
   const toughestPuzzle =
     analyticsRecords.length > 0
       ? analyticsRecords.reduce((lowest, record) =>
           record.scorePercent < lowest.scorePercent ? record : lowest
         )
       : null
+  const statsHeroCards = [
+    { label: "Played", value: stats.gamesPlayed },
+    { label: "Current Streak", value: stats.currentStreak },
+    { label: "Best Streak", value: stats.maxStreak },
+    { label: "Perfect Streak", value: stats.perfectCurrentStreak },
+  ]
   const statsContent = (
     <>
-      <strong style={{ fontSize: "18px" }}>Your Stats</strong>
-      <div style={{ display: "flex", gap: "24px", marginTop: "12px", flexWrap: "wrap" }}>
-        {[
-          { label: "Played", value: stats.gamesPlayed },
-          { label: "Streak", value: stats.currentStreak },
-          { label: "Best Streak", value: stats.maxStreak },
-          { label: "Perfect Streak", value: stats.perfectCurrentStreak },
-        ].map(({ label, value }) => (
-          <div key={label} style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
-            <div style={{ fontSize: "12px", color: "#5b4630" }}>{label}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+        <div>
+          <strong style={{ fontSize: isCompactMobile ? "19px" : "20px", display: "block" }}>Your Stats</strong>
+          <div style={{ fontSize: "13px", color: "#6d5537", marginTop: "4px" }}>
+            Track streaks, scoring, and how your puzzle runs are trending.
+          </div>
+        </div>
+        {stats.gamesPlayed > 0 && (
+          <div
+            style={{
+              padding: "8px 12px",
+              borderRadius: "999px",
+              background: "rgba(255,250,240,0.78)",
+              border: "1px solid rgba(123, 98, 65, 0.14)",
+              fontSize: "12px",
+              fontWeight: 800,
+              color: "#5b4630",
+            }}
+          >
+            {stats.gamesPlayed} games logged
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isCompactMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+          gap: "10px",
+          marginTop: "14px",
+        }}
+      >
+        {statsHeroCards.map(({ label, value }) => (
+          <div
+            key={label}
+            style={{
+              background: "linear-gradient(180deg, rgba(255,250,240,0.82) 0%, rgba(247,237,222,0.94) 100%)",
+              border: "1px solid rgba(123, 98, 65, 0.12)",
+              borderRadius: "14px",
+              padding: isCompactMobile ? "12px" : "14px",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42)",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#8a6a42", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 800 }}>
+              {label}
+            </div>
+            <div style={{ fontSize: isCompactMobile ? "28px" : "30px", fontWeight: 800, lineHeight: 1 }}>
+              {value}
+            </div>
           </div>
         ))}
       </div>
       {stats.gamesPlayed > 0 && (
-        <div style={{ marginTop: "16px" }}>
-          <div style={{ fontWeight: "bold", marginBottom: "10px", fontSize: "13px" }}>
-            Puzzle Analytics
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isCompactMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-              gap: "10px",
-              marginBottom: "16px",
-            }}
-          >
-            {[
-              { label: "Avg Score", value: `${averageScorePercent}%` },
-              { label: "Avg Attempts", value: averageAttemptsUsed },
-              { label: "Hint Rate", value: `${hintUsageRate}%` },
-              { label: "Hard Games", value: hardGamesPlayed },
-              { label: "Perfect Rate", value: `${perfectRate}%` },
-            ].map(({ label, value }) => (
-              <div
-                key={label}
-                style={{
-                  background: "rgba(255,250,240,0.7)",
-                  border: "1px solid rgba(123, 98, 65, 0.12)",
-                  borderRadius: "12px",
-                  padding: "10px 12px",
-                }}
-              >
-                <div style={{ fontSize: "12px", color: "#8a6a42", marginBottom: "4px" }}>{label}</div>
-                <div style={{ fontSize: "22px", fontWeight: 800 }}>{value}</div>
-              </div>
-            ))}
-          </div>
-
+        <div style={{ marginTop: "18px" }}>
           {toughestPuzzle && (
             <div
               style={{
-                background: "rgba(255,250,240,0.7)",
+                background: "linear-gradient(180deg, rgba(255,250,240,0.72) 0%, rgba(245,234,214,0.92) 100%)",
                 border: "1px solid rgba(123, 98, 65, 0.12)",
-                borderRadius: "12px",
-                padding: "10px 12px",
+                borderRadius: "14px",
+                padding: "12px 14px",
                 marginBottom: "16px",
               }}
             >
-              <div style={{ fontSize: "12px", color: "#8a6a42", marginBottom: "4px" }}>Toughest Puzzle So Far</div>
-              <div style={{ fontSize: "16px", fontWeight: 800 }}>
+              <div style={{ fontSize: "12px", color: "#8a6a42", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 800 }}>
+                Toughest Puzzle So Far
+              </div>
+              <div style={{ fontSize: "17px", fontWeight: 800 }}>
                 {formatDisplayDate(toughestPuzzle.date)} · {toughestPuzzle.mode}
               </div>
-              <div style={{ fontSize: "13px", color: "#5b4630", marginTop: "4px" }}>
-                Best score {toughestPuzzle.bestScore} · {Math.round(toughestPuzzle.scorePercent * 100)}% of top play
+              <div style={{ fontSize: "13px", color: "#5b4630", marginTop: "6px", lineHeight: 1.45 }}>
+                Best score {toughestPuzzle.bestScore} and {Math.round(toughestPuzzle.scorePercent * 100)}% of the top play.
               </div>
             </div>
           )}
 
-          <div style={{ fontWeight: "bold", marginBottom: "8px", fontSize: "13px" }}>
+          <div style={{ fontWeight: "bold", marginBottom: "10px", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a6a42" }}>
             Score Distribution
           </div>
           {(["Perfect", "Excellent", "Great", "Solid", "Keep trying"] as const).map(
@@ -2396,20 +2469,36 @@ export default function Home() {
               return (
                 <div
                   key={rating}
-                  style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isCompactMobile ? "72px 1fr 28px" : "94px 1fr 34px",
+                    alignItems: "center",
+                    gap: "10px",
+                    marginBottom: "8px",
+                  }}
                 >
-                  <span style={{ width: "80px", fontSize: "12px", flexShrink: 0 }}>{rating}</span>
+                  <span style={{ fontSize: "12px", flexShrink: 0, fontWeight: 700 }}>{rating}</span>
                   <div
                     style={{
                       height: "18px",
-                      width: `${Math.max(pct, count > 0 ? 6 : 0)}%`,
-                      backgroundColor: "#b98f58",
-                      borderRadius: "3px",
-                      minWidth: count > 0 ? "24px" : "0",
-                      transition: "width 0.3s",
+                      borderRadius: "999px",
+                      background: "rgba(185, 143, 88, 0.14)",
+                      overflow: "hidden",
+                      border: "1px solid rgba(123, 98, 65, 0.08)",
                     }}
-                  />
-                  <span style={{ fontSize: "12px" }}>{count}</span>
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.max(pct, count > 0 ? 6 : 0)}%`,
+                        background: "linear-gradient(90deg, #c49a61 0%, #a97d47 100%)",
+                        borderRadius: "999px",
+                        minWidth: count > 0 ? "24px" : "0",
+                        transition: "width 0.3s",
+                      }}
+                    />
+                  </div>
+                  <span style={{ fontSize: "12px", textAlign: "right", fontWeight: 700 }}>{count}</span>
                 </div>
               )
             }
@@ -2458,14 +2547,8 @@ export default function Home() {
   const archiveCompletedCountThisMonth = archivePuzzleDatesInMonth.filter(
     (puzzle) => {
       const status = completedArchiveDates[puzzle.date]
-      return Boolean(status?.easy || status?.hard)
+      return Boolean(status?.mini || status?.easy || status?.hard)
     }
-  ).length
-  const archiveEasyCompletedCountThisMonth = archivePuzzleDatesInMonth.filter(
-    (puzzle) => completedArchiveDates[puzzle.date]?.easy
-  ).length
-  const archiveHardCompletedCountThisMonth = archivePuzzleDatesInMonth.filter(
-    (puzzle) => completedArchiveDates[puzzle.date]?.hard
   ).length
 
   for (let index = 0; index < archiveFirstWeekday; index++) {
@@ -2685,30 +2768,12 @@ export default function Home() {
                 boxShadow: "0 0 0 2px rgba(122,173,42,0.18)",
               }}
             />
-            Easy
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <span
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "999px",
-                background: "#5f4221",
-                boxShadow: "0 0 0 2px rgba(95,66,33,0.14)",
-              }}
-            />
-            Hard
+            Completed
           </div>
           <div style={{ opacity: 0.75 }}>
             {archivePuzzleCountThisMonth === 0
               ? "No puzzles in this month."
-              : `${archiveCompletedCountThisMonth}/${archivePuzzleCountThisMonth} dates played · ${archiveEasyCompletedCountThisMonth} easy · ${archiveHardCompletedCountThisMonth} hard`}
+              : `${archiveCompletedCountThisMonth}/${archivePuzzleCountThisMonth} dates played`}
           </div>
         </div>
         <div
@@ -2751,12 +2816,11 @@ export default function Home() {
             const isFuture = cell.date > todayDate
             const isSelected = cell.date === selectedDate
             const completionStatus = completedArchiveDates[cell.date] ?? {
+              mini: false,
               easy: false,
               hard: false,
             }
-            const isEasyCompleted = completionStatus.easy
-            const isHardCompleted = completionStatus.hard
-            const isCompleted = isEasyCompleted || isHardCompleted
+            const isCompleted = Boolean(completionStatus.mini || completionStatus.easy || completionStatus.hard)
             const hasPuzzle = Boolean(cell.puzzleDate)
 
             if (!hasPuzzle) {
@@ -2821,12 +2885,7 @@ export default function Home() {
                     style={{
                       position: "absolute",
                       inset: 0,
-                      background:
-                        isEasyCompleted && isHardCompleted
-                          ? "linear-gradient(90deg, #7aad2a 0%, #7aad2a 50%, #5f4221 50%, #5f4221 100%)"
-                          : isHardCompleted
-                            ? "#5f4221"
-                            : "#7aad2a",
+                      background: "#7aad2a",
                     }}
                   />
                 )}
@@ -2878,7 +2937,6 @@ export default function Home() {
       </div>
     </div>
   )
-
   if (!hasMounted) {
     return <main style={{ minHeight: "100dvh", backgroundColor: "#e8dcc8" }} />
   }
@@ -2887,7 +2945,7 @@ export default function Home() {
     <main
       style={{
         minHeight: "100dvh",
-        height: isCompactMobile ? "100dvh" : undefined,
+        height: "100dvh",
         background:
           "linear-gradient(180deg, rgba(251,245,234,0.96) 0%, rgba(242,230,210,0.96) 100%)",
         padding: isCompactMobile
@@ -2895,15 +2953,14 @@ export default function Home() {
           : "clamp(12px, 4vw, 32px)",
         fontFamily: "var(--font-sans)",
         color: "#2f2419",
-        animation: reducedMotionEnabled ? undefined : "fade-up 300ms ease both",
-        overflow: isCompactMobile ? "hidden" : undefined,
+        overflow: "hidden",
       }}
     >
       <div
         style={{
           maxWidth: isCompactMobile ? "100%" : "920px",
           margin: "0 auto",
-          height: isCompactMobile ? "100%" : undefined,
+          height: "100%",
         }}
       >
         {viewMode === "home" ? (
@@ -3271,7 +3328,7 @@ export default function Home() {
                   fontWeight: 500,
                 }}
               >
-                Choose your daily mode.
+                Choose your daily board.
               </p>
 
               <div
@@ -3287,12 +3344,15 @@ export default function Home() {
                   marginInline: "auto",
                 }}
               >
-                {(["easy", "hard"] as const).map((mode) => {
-                  const isSelected = selectedMode === mode
+                {([
+                  { key: "mini", label: "Mini" },
+                  { key: "easy", label: "Easy" },
+                ] as const).map((mode) => {
+                  const isSelected = selectedMode === mode.key
                   return (
                     <button
-                      key={mode}
-                      onClick={() => setSelectedMode(mode)}
+                      key={mode.key}
+                      onClick={() => setSelectedMode(mode.key)}
                       style={{
                         padding: isCompactMobile ? "10px 12px" : "11px 14px",
                         borderRadius: "10px",
@@ -3302,11 +3362,10 @@ export default function Home() {
                         cursor: "pointer",
                         fontSize: isCompactMobile ? "15px" : "16px",
                         fontWeight: 800,
-                        textTransform: "capitalize",
                         boxShadow: isSelected ? "0 4px 10px rgba(61, 42, 56, 0.08)" : "none",
                       }}
                     >
-                      {mode}
+                      {mode.label}
                     </button>
                   )
                 })}
@@ -3361,7 +3420,9 @@ export default function Home() {
               >
                 Puzzle by Lexicon
                 <br />
-                Pick your track and play.
+                {selectedMode === "mini"
+                  ? "Mini gives you a quicker 5x5 board."
+                  : "Easy keeps the classic 7x7 board."}
               </div>
 
               {(!currentUser || currentUser.anon) ? (
@@ -3528,13 +3589,15 @@ export default function Home() {
                   padding: "7px 10px",
                   fontSize: "12px",
                   borderRadius: "999px",
-                  backgroundColor: activeGameMode === "hard" ? "rgba(90,58,20,0.96)" : "rgba(219,233,255,0.96)",
-                  color: activeGameMode === "hard" ? "#fffaf1" : "#26456e",
+                  backgroundColor:
+                    loadedGameConfig.mode === "mini"
+                      ? "rgba(236, 221, 184, 0.96)"
+                      : "rgba(219,233,255,0.96)",
+                  color: loadedGameConfig.mode === "mini" ? "#6a4c1c" : "#26456e",
                   fontWeight: 800,
-                  textTransform: "capitalize",
                 }}
               >
-                {activeGameMode}
+                {loadedGameConfig.mode === "mini" ? "Mini" : "Easy"}
               </span>
             </div>
             <button
@@ -3574,7 +3637,7 @@ export default function Home() {
               }}
             >
               <strong>{formatDisplayDate(puzzle.date)}</strong> ·{" "}
-              <strong style={{ textTransform: "capitalize" }}>{activeGameMode}</strong> mode
+              <strong>{loadedGameConfig.mode === "mini" ? "Mini" : "Easy"}</strong>
             </div>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -3870,11 +3933,11 @@ export default function Home() {
               )}
             </p>
             <p>
-              Best play: <strong>{solution.bestWords.join(", ") || "Unknown"}</strong>
+              Optimal play: <strong>{solution.bestWords.join(", ") || "Unknown"}</strong>
             </p>
             {getFullSolution().bestPlacement.length > 0 && (
               <p style={{ fontSize: "13px", color: "#1d4ed8", margin: "4px 0 0" }}>
-                Blue tiles on the board show the optimal placement.
+                Blue tiles on the board show the optimal placement, not the word you submitted.
               </p>
             )}
 
@@ -4212,7 +4275,7 @@ export default function Home() {
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: isCompactMobile ? "10px" : "18px",
+              gap: isCompactMobile ? "10px" : isDesktopHardMode ? "12px" : "18px",
               alignItems: "stretch",
             }}
           >
@@ -4220,7 +4283,9 @@ export default function Home() {
               style={{
                 background:
                   "linear-gradient(180deg, var(--board-shell-start) 0%, var(--board-shell-mid) 42%, var(--board-shell-end) 100%)",
-                padding: isCompactMobile ? `${compactBoardShellPadding}px` : "14px",
+                padding: isCompactMobile
+                  ? `${compactBoardShellPadding}px`
+                  : `${desktopBoardShellPadding}px`,
                 borderRadius: isCompactMobile ? "16px" : "22px",
                 boxShadow: "0 16px 34px var(--board-shell-shadow)",
                 width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
@@ -4300,7 +4365,11 @@ export default function Home() {
                       width: "100%",
                       aspectRatio: "1 / 1",
                       border:
-                        draggedTile && !letter
+                        draggedPlacedTile &&
+                        draggedPlacedTile.row === row &&
+                        draggedPlacedTile.col === col
+                          ? "2px solid #2563eb"
+                          : draggedTile && !letter
                           ? "2px dashed #7b6241"
                           : "1px solid #7b6241",
                       display: "flex",
@@ -4333,7 +4402,7 @@ export default function Home() {
                         draggedPlacedTile &&
                         draggedPlacedTile.row === row &&
                         draggedPlacedTile.col === col
-                          ? 0.55
+                          ? 0.78
                           : 1,
                     }}
                   >
@@ -4484,8 +4553,8 @@ export default function Home() {
                       <span
                         style={{
                           position: "absolute",
-                          bottom: "4px",
-                          right: "5px",
+                          bottom: isDesktopHardMode ? "2px" : "4px",
+                          right: isDesktopHardMode ? "3px" : "5px",
                           fontSize: boardScoreFontSize,
                           fontWeight: "bold",
                           color: "#4b3a28",
@@ -4505,17 +4574,26 @@ export default function Home() {
                           padding: "0 7px",
                           borderRadius: "999px",
                           background:
-                            "linear-gradient(180deg, rgba(125,197,42,0.98) 0%, rgba(89,161,23,0.98) 100%)",
+                            isLiveScorePreviewValid
+                              ? "linear-gradient(180deg, rgba(125,197,42,0.98) 0%, rgba(89,161,23,0.98) 100%)"
+                              : "linear-gradient(180deg, rgba(214,145,52,0.98) 0%, rgba(173,104,24,0.98) 100%)",
                           color: "#fffdf8",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           fontSize: isCompactMobile ? "13px" : "14px",
                           fontWeight: 900,
-                          boxShadow: "0 8px 16px rgba(71, 117, 20, 0.28)",
+                          boxShadow: isLiveScorePreviewValid
+                            ? "0 8px 16px rgba(71, 117, 20, 0.28)"
+                            : "0 8px 16px rgba(136, 82, 16, 0.24)",
                           border: "2px solid rgba(255,255,255,0.72)",
                           zIndex: 4,
                         }}
+                        title={
+                          isLiveScorePreviewValid
+                            ? "Current move score"
+                            : "Current move score, but the word is not valid"
+                        }
                       >
                         {liveScoreTotal}
                       </div>
@@ -4543,15 +4621,15 @@ export default function Home() {
                 background: isCompactMobile ? "transparent" : "rgba(255,250,240,0.84)",
                 border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.14)",
                 borderRadius: isCompactMobile ? "0" : "20px",
-                padding: isCompactMobile ? "6px 0 0" : "16px",
+                padding: isCompactMobile ? "6px 0 0" : isDesktopHardMode ? "12px" : "16px",
                 boxShadow: isCompactMobile ? "none" : "0 12px 28px rgba(78, 56, 28, 0.06)",
-                marginTop: isCompactMobile ? "8px" : "16px",
+                marginTop: isCompactMobile ? "8px" : isDesktopHardMode ? "12px" : "16px",
               }}
             >
               {!isCompactMobile && (
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: isCompactMobile ? "8px" : "12px" }}>
-                  <h2 style={{ margin: 0, fontSize: isCompactMobile ? "16px" : "18px" }}>Your Tiles</h2>
-                  <div style={{ fontSize: isCompactMobile ? "11px" : "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: isCompactMobile ? "8px" : isDesktopHardMode ? "8px" : "12px" }}>
+                  <h2 style={{ margin: 0, fontSize: isCompactMobile ? "16px" : isDesktopHardMode ? "16px" : "18px" }}>Your Tiles</h2>
+                  <div style={{ fontSize: isCompactMobile ? "11px" : isDesktopHardMode ? "12px" : "13px", color: "#6d5537" }}>Drag to reorder or tap a tile then a square.</div>
                 </div>
               )}
 
@@ -4664,9 +4742,9 @@ export default function Home() {
                         <span
                           style={{
                             position: "absolute",
-                            bottom: isCompactMobile ? "3px" : "4px",
-                            right: isCompactMobile ? "4px" : "6px",
-                            fontSize: isCompactMobile ? "8px" : "11px",
+                            bottom: isCompactMobile ? "3px" : isDesktopHardMode ? "2px" : "4px",
+                            right: isCompactMobile ? "4px" : isDesktopHardMode ? "3px" : "6px",
+                            fontSize: isCompactMobile ? "8px" : isDesktopHardMode ? "6px" : "11px",
                             fontWeight: "bold",
                             color: "#4b3a28",
                           }}
@@ -4708,9 +4786,11 @@ export default function Home() {
                   display: "grid",
                   gridTemplateColumns: isCompactMobile
                     ? "0.78fr 0.95fr 0.95fr 1.12fr"
+                    : isDesktopHardMode
+                    ? "minmax(80px, 0.95fr) minmax(108px, 1fr) minmax(108px, 1fr) minmax(156px, 1.3fr)"
                     : "minmax(80px, 0.95fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(180px, 1.4fr)",
-                  gap: isCompactMobile ? "6px" : "10px",
-                  marginTop: isCompactMobile ? "10px" : "18px",
+                  gap: isCompactMobile ? "6px" : isDesktopHardMode ? "8px" : "10px",
+                  marginTop: isCompactMobile ? "10px" : isDesktopHardMode ? "14px" : "18px",
                   alignItems: "stretch",
                 }}
               >
@@ -4721,8 +4801,8 @@ export default function Home() {
                       width: "100%",
                       height: "100%",
                       minHeight: `${actionButtonMinHeight}px`,
-                      padding: isCompactMobile ? "6px 6px" : "10px 12px",
-                      fontSize: isCompactMobile ? "11px" : "14px",
+                      padding: isCompactMobile ? "6px 6px" : isDesktopHardMode ? "8px 10px" : "10px 12px",
+                      fontSize: isCompactMobile ? "11px" : isDesktopHardMode ? "13px" : "14px",
                       borderRadius: isCompactMobile ? "16px" : "18px",
                       border: "none",
                       backgroundColor: isCompactMobile ? "transparent" : showMoreActions ? "#d7c3a0" : "#efe2c7",
@@ -4844,6 +4924,43 @@ export default function Home() {
                           Share Results
                         </button>
                       )}
+                      {gameOver && (
+                        <button
+                          onClick={() => {
+                            setShowResultsModal(true)
+                            setShowMoreActions(false)
+                          }}
+                          style={{
+                            padding: "10px 12px",
+                            fontSize: "14px",
+                            borderRadius: "14px",
+                            border: "1px solid rgba(123, 98, 65, 0.2)",
+                            backgroundColor: "#f5ead6",
+                            cursor: "pointer",
+                            color: "#2f2419",
+                            fontWeight: 700,
+                            textAlign: "left",
+                          }}
+                        >
+                          View Results
+                        </button>
+                      )}
+                      <button
+                        onClick={resetCurrentPuzzle}
+                        style={{
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          borderRadius: "14px",
+                          border: "1px solid rgba(123, 98, 65, 0.2)",
+                          backgroundColor: "#f5ead6",
+                          cursor: "pointer",
+                          color: "#2f2419",
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        Reset Puzzle
+                      </button>
                     </div>
                   )}
                 </div>
@@ -4854,8 +4971,8 @@ export default function Home() {
                   style={{
                     width: "100%",
                     minHeight: `${actionButtonMinHeight}px`,
-                    padding: isCompactMobile ? "6px 6px" : "10px 14px",
-                    fontSize: isCompactMobile ? "12px" : "15px",
+                    padding: isCompactMobile ? "6px 6px" : isDesktopHardMode ? "8px 10px" : "10px 14px",
+                    fontSize: isCompactMobile ? "12px" : isDesktopHardMode ? "14px" : "15px",
                     borderRadius: isCompactMobile ? "16px" : "18px",
                     border: isCompactMobile ? "none" : "1px solid rgba(123, 98, 65, 0.2)",
                     backgroundColor:
@@ -4881,8 +4998,8 @@ export default function Home() {
                   style={{
                     width: "100%",
                     minHeight: `${actionButtonMinHeight}px`,
-                    padding: isCompactMobile ? "6px 6px" : "10px 14px",
-                    fontSize: isCompactMobile ? "12px" : "15px",
+                    padding: isCompactMobile ? "6px 6px" : isDesktopHardMode ? "8px 10px" : "10px 14px",
+                    fontSize: isCompactMobile ? "12px" : isDesktopHardMode ? "14px" : "15px",
                     borderRadius: isCompactMobile ? "16px" : "18px",
                     border: isCompactMobile ? "none" : "1px solid rgba(69,50,27,0.18)",
                     backgroundColor: isCompactMobile ? "transparent" : gameOver ? "#ddd6c8" : "#efe2c7",
@@ -4901,8 +5018,8 @@ export default function Home() {
                   style={{
                     width: "100%",
                     minHeight: `${actionButtonMinHeight}px`,
-                    padding: isCompactMobile ? "8px 8px" : "12px 18px",
-                    fontSize: isCompactMobile ? "13px" : "16px",
+                    padding: isCompactMobile ? "8px 8px" : isDesktopHardMode ? "10px 14px" : "12px 18px",
+                    fontSize: isCompactMobile ? "13px" : isDesktopHardMode ? "15px" : "16px",
                     borderRadius: "999px",
                     border: isCompactMobile ? "none" : "1px solid rgba(34,25,13,0.12)",
                     backgroundColor: isCompactMobile ? "#b9b4b0" : gameOver ? "#ddd6c8" : "#17120d",
@@ -5044,12 +5161,6 @@ export default function Home() {
                 description: "Use vibration feedback on supported mobile devices.",
                 checked: hapticsEnabled,
                 onChange: () => setHapticsEnabled((prev) => !prev),
-              },
-              {
-                label: "Reduced motion",
-                description: "Tone down pop, bounce, and celebration animations.",
-                checked: reducedMotionEnabled,
-                onChange: () => setReducedMotionEnabled((prev) => !prev),
               },
             ].map((setting, index) => (
               <button
