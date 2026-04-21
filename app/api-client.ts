@@ -358,26 +358,44 @@ export async function createShareLink(puzzleDate: string, puzzleMode: string, be
 }
 
 export async function loadWordDefinition(word: string): Promise<string | null> {
-  try {
-    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`)
-    if (!res.ok) return null
+  const normalizedWord = word.toLowerCase().replace(/[^a-z]/g, "")
+  if (!normalizedWord) return null
 
-    const data = await res.json() as Array<{
-      meanings?: Array<{
-        definitions?: Array<{
-          definition?: string
+  const lookupCandidates = Array.from(new Set([
+    normalizedWord,
+    ...(normalizedWord.endsWith("ies") && normalizedWord.length > 4
+      ? [`${normalizedWord.slice(0, -3)}y`]
+      : []),
+    ...(normalizedWord.endsWith("es") && normalizedWord.length > 4
+      ? [normalizedWord.slice(0, -2)]
+      : []),
+    ...(normalizedWord.endsWith("s") && normalizedWord.length > 3
+      ? [normalizedWord.slice(0, -1)]
+      : []),
+  ]))
+
+  try {
+    for (const candidate of lookupCandidates) {
+      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(candidate)}`)
+      if (!res.ok) continue
+
+      const data = await res.json() as Array<{
+        meanings?: Array<{
+          definitions?: Array<{
+            definition?: string
+          }>
         }>
       }>
-    }>
-    if (!Array.isArray(data) || data.length === 0) return null
+      if (!Array.isArray(data) || data.length === 0) continue
 
-    for (const entry of data) {
-      const meanings = Array.isArray(entry?.meanings) ? entry.meanings : []
-      for (const meaning of meanings) {
-        const definitions = Array.isArray(meaning?.definitions) ? meaning.definitions : []
-        const firstDefinition = definitions.find((definition) => typeof definition?.definition === "string" && definition.definition.trim().length > 0)
-        if (firstDefinition?.definition) {
-          return firstDefinition.definition.trim()
+      for (const entry of data) {
+        const meanings = Array.isArray(entry?.meanings) ? entry.meanings : []
+        for (const meaning of meanings) {
+          const definitions = Array.isArray(meaning?.definitions) ? meaning.definitions : []
+          const firstDefinition = definitions.find((definition) => typeof definition?.definition === "string" && definition.definition.trim().length > 0)
+          if (firstDefinition?.definition) {
+            return firstDefinition.definition.trim()
+          }
         }
       }
     }

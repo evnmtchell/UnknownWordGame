@@ -13,6 +13,25 @@ type TileSelection = {
   isBlank: boolean
 } | null
 
+type PendingBlankPlacement =
+  | {
+      kind: "new"
+      tileData: Exclude<TileSelection, null>
+      row: number
+      col: number
+    }
+  | {
+      kind: "move"
+      tile: Exclude<DraggedPlacedTile, null>
+      row: number
+      col: number
+    }
+  | {
+      kind: "edit"
+      tile: Exclude<DraggedPlacedTile, null>
+    }
+  | null
+
 type DraggedPlacedTile = {
   row: number
   col: number
@@ -525,7 +544,9 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false)
   const [showPuzzleReview, setShowPuzzleReview] = useState(false)
   const [showResultsModal, setShowResultsModal] = useState(false)
+  const [pendingBlankPlacement, setPendingBlankPlacement] = useState<PendingBlankPlacement>(null)
   const [optimalDefinition, setOptimalDefinition] = useState<string | null>(null)
+  const [optimalDefinitionWord, setOptimalDefinitionWord] = useState<string | null>(null)
   const [isLoadingOptimalDefinition, setIsLoadingOptimalDefinition] = useState(false)
   const [recentPlacementKey, setRecentPlacementKey] = useState<string | null>(null)
   const [uiFeedback, setUiFeedback] = useState<{ kind: UiFeedbackKind; tick: number } | null>(null)
@@ -1095,16 +1116,28 @@ export default function Home() {
   function getCellBackground(row: number, col: number, hasLetter: boolean) {
     if (hasLetter) return "#e7d3a8"
 
-    if (gameOver && isOptimalCell(row, col)) return "#bde0fe"
-    if (showHint && isOptimalCell(row, col)) return "#bbf7d0"
+    if (gameOver && isOptimalCell(row, col)) {
+      return "linear-gradient(180deg, rgba(198,224,255,0.98) 0%, rgba(147,194,255,0.98) 100%)"
+    }
+    if (showHint && isOptimalCell(row, col)) {
+      return "linear-gradient(180deg, rgba(212,249,221,0.98) 0%, rgba(151,224,173,0.98) 100%)"
+    }
     const bonus = getBonusAt(row, col)
 
-    if (bonus === "DL") return "#cfe8ff"
-    if (bonus === "TL") return "#8dc5ff"
-    if (bonus === "DW") return "#ffd1dc"
-    if (bonus === "TW") return "#ff9fb2"
+    if (bonus === "DL") {
+      return "linear-gradient(180deg, rgba(221,238,255,0.98) 0%, rgba(190,220,255,0.98) 100%)"
+    }
+    if (bonus === "TL") {
+      return "linear-gradient(180deg, rgba(161,210,255,0.98) 0%, rgba(120,185,250,0.98) 100%)"
+    }
+    if (bonus === "DW") {
+      return "linear-gradient(180deg, rgba(255,225,234,0.98) 0%, rgba(249,193,208,0.98) 100%)"
+    }
+    if (bonus === "TW") {
+      return "linear-gradient(180deg, rgba(255,180,196,0.98) 0%, rgba(244,139,162,0.98) 100%)"
+    }
 
-    return "#f7f3ea"
+    return "linear-gradient(180deg, rgba(251,247,239,0.98) 0%, rgba(242,235,224,0.98) 100%)"
   }
 
   function getBonusLabel(row: number, col: number, hasLetter: boolean) {
@@ -1120,20 +1153,94 @@ export default function Home() {
     setSelectedTile({ letter: tile, index, isBlank: tile === BLANK_TILE })
   }
 
-  function chooseBlankLetter() {
-    const response = window.prompt("Choose a letter for the blank tile (A-Z).")
-    if (response === null) {
-      setMessage("Blank tile placement cancelled.")
-      return null
+  function commitPlacedTile(tileData: Exclude<TileSelection, null>, row: number, col: number, resolvedLetter: string) {
+    setPlacedTiles((prev) => [
+      ...prev,
+      { row, col, letter: resolvedLetter, isBlank: tileData.isBlank, rackIndex: tileData.index },
+    ])
+    setRecentPlacementKey(`${row}-${col}`)
+    setRack((prev) => prev.map((tile, index) => (index === tileData.index ? null : tile)))
+    draggedTileRef.current = null
+    setSelectedTile(null)
+    setDraggedTile(null)
+    setRackDropIndex(null)
+    setPendingBlankPlacement(null)
+    triggerAppHapticFeedback(tileData.isBlank ? [10, 20, 10] : 12)
+    playPlacementSound()
+    setMessage(
+      tileData.isBlank
+        ? `Blank tile placed as ${resolvedLetter}.`
+        : "Tile placed. Keep building your move."
+    )
+  }
+
+  function commitMovedBlankTile(tile: Exclude<DraggedPlacedTile, null>, row: number, col: number, resolvedLetter: string) {
+    const remainingTiles = placedTiles.filter(
+      (placed) => !(placed.row === tile.row && placed.col === tile.col)
+    )
+
+    setPlacedTiles([
+      ...remainingTiles,
+      { row, col, letter: resolvedLetter, isBlank: true, rackIndex: tile.rackIndex },
+    ])
+    setRecentPlacementKey(`${row}-${col}`)
+    draggedPlacedTileRef.current = null
+    setDraggedPlacedTile(null)
+    setSelectedTile(null)
+    setRackDropIndex(null)
+    setPendingBlankPlacement(null)
+    triggerAppHapticFeedback([10, 20, 10])
+    playPlacementSound()
+    setMessage(`Blank tile moved as ${resolvedLetter}.`)
+  }
+
+  function updateBlankTileInPlace(tile: Exclude<DraggedPlacedTile, null>, resolvedLetter: string) {
+    setPlacedTiles((prev) =>
+      prev.map((placed) =>
+        placed.row === tile.row && placed.col === tile.col
+          ? { ...placed, letter: resolvedLetter, isBlank: true }
+          : placed
+      )
+    )
+    draggedPlacedTileRef.current = null
+    setDraggedPlacedTile(null)
+    setSelectedTile(null)
+    setRackDropIndex(null)
+    setPendingBlankPlacement(null)
+    triggerAppHapticFeedback([10, 20, 10])
+    setMessage(`Blank tile changed to ${resolvedLetter}.`)
+  }
+
+  function cancelBlankPlacement() {
+    draggedPlacedTileRef.current = null
+    setDraggedPlacedTile(null)
+    setPendingBlankPlacement(null)
+    setMessage("Blank tile placement cancelled.")
+  }
+
+  function handleBlankLetterChoice(letter: string) {
+    if (!pendingBlankPlacement) return
+    if (pendingBlankPlacement.kind === "new") {
+      commitPlacedTile(
+        pendingBlankPlacement.tileData,
+        pendingBlankPlacement.row,
+        pendingBlankPlacement.col,
+        letter
+      )
+      return
     }
 
-    const letter = response.trim().toUpperCase()
-    if (!/^[A-Z]$/.test(letter)) {
-      setMessage("Blank tiles must be assigned a single letter from A to Z.")
-      return null
+    if (pendingBlankPlacement.kind === "move") {
+      commitMovedBlankTile(
+        pendingBlankPlacement.tile,
+        pendingBlankPlacement.row,
+        pendingBlankPlacement.col,
+        letter
+      )
+      return
     }
 
-    return letter
+    updateBlankTileInPlace(pendingBlankPlacement.tile, letter)
   }
 
   function shuffleRack() {
@@ -1218,26 +1325,12 @@ export default function Home() {
       return
     }
 
-    const resolvedLetter = tileData.isBlank ? chooseBlankLetter() : tileData.letter
-    if (!resolvedLetter) return
+    if (tileData.isBlank) {
+      setPendingBlankPlacement({ kind: "new", tileData, row, col })
+      return
+    }
 
-    setPlacedTiles((prev) => [
-      ...prev,
-      { row, col, letter: resolvedLetter, isBlank: tileData.isBlank, rackIndex: tileData.index },
-    ])
-    setRecentPlacementKey(`${row}-${col}`)
-    setRack((prev) => prev.map((tile, index) => (index === tileData.index ? null : tile)))
-    draggedTileRef.current = null
-    setSelectedTile(null)
-    setDraggedTile(null)
-    setRackDropIndex(null)
-    triggerAppHapticFeedback(tileData.isBlank ? [10, 20, 10] : 12)
-    playPlacementSound()
-    setMessage(
-      tileData.isBlank
-        ? `Blank tile placed as ${resolvedLetter}.`
-        : "Tile placed. Keep building your move."
-    )
+    commitPlacedTile(tileData, row, col, tileData.letter)
   }
 
   function movePlacedTileOnBoard(tile: DraggedPlacedTile, row: number, col: number) {
@@ -1256,6 +1349,14 @@ export default function Home() {
     const remainingTiles = placedTiles.filter(
       (placed) => !(placed.row === tile.row && placed.col === tile.col)
     )
+
+    if (tile.isBlank) {
+      setDraggedPlacedTile(tile)
+      draggedPlacedTileRef.current = tile
+      setPendingBlankPlacement({ kind: "move", tile, row, col })
+      setMessage("Choose a new letter for the blank tile.")
+      return
+    }
 
     setPlacedTiles([
       ...remainingTiles,
@@ -1291,6 +1392,14 @@ export default function Home() {
         letter: placedTile.letter,
         isBlank: placedTile.isBlank,
         rackIndex: placedTile.rackIndex,
+      }
+      if (placedTile.isBlank) {
+        draggedPlacedTileRef.current = selectedPlacedTile
+        setDraggedPlacedTile(selectedPlacedTile)
+        setSelectedTile(null)
+        setPendingBlankPlacement({ kind: "edit", tile: selectedPlacedTile })
+        setMessage("Choose a new letter for the blank tile.")
+        return
       }
       draggedPlacedTileRef.current = selectedPlacedTile
       setDraggedPlacedTile(selectedPlacedTile)
@@ -1684,8 +1793,7 @@ export default function Home() {
     const totalScore = wordsFormed.reduce((sum, item) => sum + item.score, 0)
     const wordResults = wordsFormed.map(({ word, score }) => ({ word, score }))
     const placementSnapshot = placedTiles.map((tile) => ({ ...tile }))
-    const solutionForSubmit =
-      totalScore > solution.bestScore ? syncPuzzleOptimalWithFullSolution() : solution
+    const solutionForSubmit = syncPuzzleOptimalWithFullSolution()
     const solvedOptimally = totalScore >= solutionForSubmit.bestScore
     const solvedOptimallyOnFirstTry = attemptHistory.length === 0 && solvedOptimally
     const newAttemptsLeft = solvedOptimally ? 0 : attemptsLeft - 1
@@ -2242,6 +2350,7 @@ export default function Home() {
   useEffect(() => {
     if (!showResultsModal || !gameOver || !primaryOptimalWord) {
       setOptimalDefinition(null)
+      setOptimalDefinitionWord(null)
       setIsLoadingOptimalDefinition(false)
       return
     }
@@ -2249,17 +2358,40 @@ export default function Home() {
     let cancelled = false
     setIsLoadingOptimalDefinition(true)
     setOptimalDefinition(null)
+    setOptimalDefinitionWord(null)
 
-    loadWordDefinition(primaryOptimalWord).then((definition) => {
+    const definitionCandidates = Array.from(
+      new Set(
+        solution.bestWords
+          .map((word) => word.trim())
+          .filter((word) => word.length > 0)
+      )
+    )
+
+    async function loadOptimalDefinition() {
+      for (const word of definitionCandidates) {
+        const definition = await loadWordDefinition(word)
+        if (cancelled) return
+        if (definition) {
+          setOptimalDefinition(definition)
+          setOptimalDefinitionWord(word)
+          setIsLoadingOptimalDefinition(false)
+          return
+        }
+      }
+
       if (cancelled) return
-      setOptimalDefinition(definition)
+      setOptimalDefinition(null)
+      setOptimalDefinitionWord(primaryOptimalWord)
       setIsLoadingOptimalDefinition(false)
-    })
+    }
+
+    void loadOptimalDefinition()
 
     return () => {
       cancelled = true
     }
-  }, [showResultsModal, gameOver, primaryOptimalWord])
+  }, [showResultsModal, gameOver, primaryOptimalWord, solution.bestWords])
 
   function getRating() {
     if (solution.bestScore <= 0) return ""
@@ -4068,7 +4200,7 @@ export default function Home() {
                   {isLoadingOptimalDefinition
                     ? `Looking up ${primaryOptimalWord.toLowerCase()}...`
                     : optimalDefinition
-                      ? `${primaryOptimalWord}: ${optimalDefinition}`
+                      ? `${(optimalDefinitionWord ?? primaryOptimalWord).toUpperCase()}: ${optimalDefinition}`
                       : `No definition available for ${primaryOptimalWord.toLowerCase()}.`}
                 </div>
               </div>
@@ -4425,7 +4557,9 @@ export default function Home() {
                   ? `${compactBoardShellPadding}px`
                   : `${desktopBoardShellPadding}px`,
                 borderRadius: isCompactMobile ? "16px" : "22px",
-                boxShadow: "0 16px 34px var(--board-shell-shadow)",
+                border: "1px solid rgba(255,255,255,0.34)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -18px 28px rgba(61, 89, 118, 0.08), 0 18px 36px var(--board-shell-shadow), 0 4px 10px rgba(37, 56, 78, 0.08)",
                 width: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
                 maxWidth: isCompactMobile && compactPuzzleFrameWidth ? `${compactPuzzleFrameWidth}px` : "100%",
                 overflowX: isCompactMobile ? "hidden" : "auto",
@@ -4515,7 +4649,9 @@ export default function Home() {
                       justifyContent: "center",
                       fontSize: hasLetter ? boardTileFontSize : boardBonusFontSize,
                       fontWeight: "bold",
-                      backgroundColor: getCellBackground(row, col, Boolean(letter)),
+                      background: hasLetter
+                        ? "linear-gradient(180deg, rgba(240,220,171,0.98) 0%, rgba(228,202,140,0.98) 100%)"
+                        : getCellBackground(row, col, Boolean(letter)),
                       cursor: isMovablePlacedTile
                         ? "grab"
                         : gameOver
@@ -4526,7 +4662,9 @@ export default function Home() {
                       borderRadius: "10px",
                       boxSizing: "border-box",
                       transition: "transform 160ms ease, box-shadow 160ms ease",
-                      boxShadow: hasLetter ? "0 3px 6px rgba(0,0,0,0.08)" : "none",
+                      boxShadow: hasLetter
+                        ? "inset 0 1px 0 rgba(255,255,255,0.42), 0 5px 12px rgba(53, 39, 19, 0.16), 0 1px 2px rgba(53, 39, 19, 0.08)"
+                        : "inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 4px rgba(53, 39, 19, 0.04)",
                       touchAction: "none",
                       WebkitUserSelect: "none",
                       userSelect: "none",
@@ -5584,6 +5722,98 @@ export default function Home() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
                 Continue with Apple
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingBlankPlacement && (
+        <div
+          onClick={cancelBlankPlacement}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10003,
+            padding: isCompactMobile ? `${compactModalInset}px` : "16px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              backgroundColor: "#ffffff",
+              borderRadius: "14px",
+              padding: isCompactMobile ? "18px 18px 16px" : "20px 20px 18px",
+              width: `min(${isCompactMobile ? "calc(100vw - 40px)" : "320px"}, 320px)`,
+              border: "1px solid rgba(80, 104, 164, 0.14)",
+              boxShadow: "0 22px 48px rgba(22, 26, 45, 0.22)",
+              color: "#1f1f1f",
+            }}
+          >
+            <button
+              onClick={cancelBlankPlacement}
+              style={{
+                position: "absolute",
+                top: "8px",
+                right: "8px",
+                width: "28px",
+                height: "28px",
+                borderRadius: "999px",
+                border: "none",
+                background: "transparent",
+                color: "#3c3c3c",
+                fontSize: "20px",
+                lineHeight: 1,
+                cursor: "pointer",
+              }}
+              aria-label="Close blank tile chooser"
+            >
+              ×
+            </button>
+            <div
+              style={{
+                textAlign: "center",
+                fontSize: isCompactMobile ? "18px" : "20px",
+                fontWeight: 900,
+                marginBottom: "14px",
+                color: "#171717",
+              }}
+            >
+              Choose Letter
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                gap: "6px",
+              }}
+            >
+              {"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letter) => (
+                <button
+                  key={letter}
+                  onClick={() => handleBlankLetterChoice(letter)}
+                  style={{
+                    width: "100%",
+                    aspectRatio: "1 / 1",
+                    borderRadius: "8px",
+                    border: "2px solid rgba(123, 98, 65, 0.82)",
+                    background:
+                      "linear-gradient(180deg, rgba(240,220,171,0.98) 0%, rgba(228,202,140,0.98) 100%)",
+                    color: "#2f2419",
+                    fontSize: isCompactMobile ? "18px" : "19px",
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    boxShadow:
+                      "inset 0 1px 0 rgba(255,255,255,0.42), 0 4px 10px rgba(53, 39, 19, 0.14)",
+                  }}
+                >
+                  {letter}
+                </button>
+              ))}
             </div>
           </div>
         </div>
