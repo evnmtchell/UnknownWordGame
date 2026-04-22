@@ -514,6 +514,7 @@ export default function Home() {
   const [attemptHistory, setAttemptHistory] = useState<AttemptResult[]>([])
   const [hasLoadedSave, setHasLoadedSave] = useState(false)
   const [rackDropIndex, setRackDropIndex] = useState<number | null>(null)
+  const rackDropIndexRef = useRef<number | null>(null)
   const [hintLevel, setHintLevel] = useState(0)
   const [showHint, setShowHint] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
@@ -561,6 +562,11 @@ export default function Home() {
     () => new Map(puzzle.bonusCells.map((cell) => [getBoardCellKey(cell.row, cell.col), cell.type])),
     [puzzle.bonusCells]
   )
+
+  function updateRackDropIndex(index: number | null) {
+    rackDropIndexRef.current = index
+    setRackDropIndex(index)
+  }
 
   function markPlayerActivity() {
     setLastPlayerActivityAt(Date.now())
@@ -1008,6 +1014,18 @@ export default function Home() {
           setTouchDragEngaged(true)
         }
       }
+      if (touchDragRef.current?.type === "rack") {
+        const el = document.elementFromPoint(touch.clientX, touch.clientY)
+        const rackGapEl = el?.closest("[data-rack-gap]") as HTMLElement | null
+        const rackTileEl = el?.closest("[data-rack-tile]") as HTMLElement | null
+        if (rackGapEl?.dataset.rackGap) {
+          updateRackDropIndex(parseInt(rackGapEl.dataset.rackGap, 10))
+        } else if (rackTileEl?.dataset.rackTile) {
+          updateRackDropIndex(parseInt(rackTileEl.dataset.rackTile, 10))
+        } else {
+          updateRackDropIndex(null)
+        }
+      }
       setTouchDrag((prev) => (prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null))
     }
     document.addEventListener("touchmove", onTouchMove, { passive: false })
@@ -1237,7 +1255,7 @@ export default function Home() {
     })
     setSelectedTile(null)
     setDraggedTile(null)
-    setRackDropIndex(null)
+    updateRackDropIndex(null)
     setMessage("Rack shuffled.")
   }
 
@@ -1250,7 +1268,7 @@ export default function Home() {
 
     if (finalIndex === fromIndex) {
       setDraggedTile(null)
-      setRackDropIndex(null)
+      updateRackDropIndex(null)
       return
     }
 
@@ -1259,8 +1277,27 @@ export default function Home() {
     draggedTileRef.current = null
     setDraggedTile(null)
     setSelectedTile(null)
-    setRackDropIndex(null)
+    updateRackDropIndex(null)
     setMessage("Rack rearranged.")
+  }
+
+  function getRackTileShift(index: number) {
+    const draggedIndex = draggedTile?.index
+    if (draggedIndex === undefined || draggedIndex === null || rackDropIndex === null) return 0
+    if (index === draggedIndex) return 0
+
+    const slotShift =
+      rackTileSize + (isCompactMobile ? compactRackGapWidth : 10) + (isCompactMobile ? 2 : 4)
+
+    if (rackDropIndex > draggedIndex) {
+      return index > draggedIndex && index < rackDropIndex ? -slotShift : 0
+    }
+
+    if (rackDropIndex < draggedIndex) {
+      return index >= rackDropIndex && index < draggedIndex ? slotShift : 0
+    }
+
+    return 0
   }
 
   function reorderHomeBrandTile(fromIndex: number, targetIndex: number) {
@@ -1356,7 +1393,7 @@ export default function Home() {
       draggedPlacedTileRef.current = null
       setDraggedPlacedTile(null)
       setSelectedTile(null)
-      setRackDropIndex(null)
+      updateRackDropIndex(null)
       triggerAppHapticFeedback(10)
       setMessage(`Swapped ${tile.letter} and ${targetPlacedTile.letter}.`)
       return
@@ -1386,7 +1423,7 @@ export default function Home() {
     draggedPlacedTileRef.current = null
     setDraggedPlacedTile(null)
     setSelectedTile(null)
-    setRackDropIndex(null)
+    updateRackDropIndex(null)
     triggerAppHapticFeedback(10)
     setMessage(tile.isBlank ? `Moved blank tile (${tile.letter}).` : `Moved ${tile.letter}.`)
   }
@@ -1458,9 +1495,15 @@ export default function Home() {
   }
 
   function handleRackTileDragEnd() {
+    const activeDraggedTile = draggedTileRef.current
+    const activeRackDropIndex = rackDropIndexRef.current
+    if (activeDraggedTile && activeRackDropIndex !== null) {
+      reorderRackTile(activeDraggedTile.index, activeRackDropIndex)
+      return
+    }
     draggedTileRef.current = null
     setDraggedTile(null)
-    setRackDropIndex(null)
+    updateRackDropIndex(null)
   }
 
   function handlePlacedTileDragStart(
@@ -1480,7 +1523,7 @@ export default function Home() {
     draggedPlacedTileRef.current = { row, col, letter, isBlank, rackIndex }
     setDraggedTile(null)
     setSelectedTile(null)
-    setRackDropIndex(null)
+    updateRackDropIndex(null)
   }
 
   function handlePlacedTileDragEnd() {
@@ -1514,7 +1557,7 @@ export default function Home() {
     draggedPlacedTileRef.current = null
     setDraggedPlacedTile(null)
     setSelectedTile(null)
-    setRackDropIndex(null)
+    updateRackDropIndex(null)
     triggerAppHapticFeedback(10)
     setMessage(tile.isBlank ? "Returned blank tile to the rack." : `Returned ${tile.letter} to the rack.`)
   }
@@ -2802,7 +2845,8 @@ export default function Home() {
     </>
   )
   const showInGameStatsSheet = showStats && viewMode === "game"
-  const inlineStatsPanel = showStats && viewMode !== "game" && (
+  const showHomeStatsSheet = showStats && viewMode === "home" && isCompactMobile
+  const inlineStatsPanel = showStats && viewMode !== "game" && !showHomeStatsSheet && (
     <div
       style={{
         width: "100%",
@@ -4058,6 +4102,68 @@ export default function Home() {
           </div>
         )}
 
+        {showHomeStatsSheet && (
+          <div
+            onClick={() => setShowStats(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(34, 25, 13, 0.14)",
+              backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+              zIndex: 34,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "flex-start",
+              padding: `${isSmallPhone ? "max(8px, env(safe-area-inset-top)) 8px 0" : "max(10px, env(safe-area-inset-top))"} ${compactModalInset}px 0`,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: `min(calc(100vw - ${compactModalInset * 2}px), 760px)`,
+                maxHeight: isSmallPhone ? "min(70vh, 680px)" : "min(68vh, 700px)",
+                overflowY: "auto",
+                background: "linear-gradient(180deg, rgba(255,250,240,0.98) 0%, rgba(247,242,234,0.98) 100%)",
+                border: "1px solid rgba(123, 98, 65, 0.14)",
+                borderRadius: "18px",
+                boxShadow: "0 20px 40px rgba(34, 25, 13, 0.18)",
+                padding: compactModalPadding,
+                animation: reducedMotionEnabled ? undefined : "pop-in-sheet 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "12px",
+                  marginBottom: "12px",
+                }}
+              >
+                <div style={{ fontSize: "13px", color: "#8a6a42", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Stats
+                </div>
+                <button
+                  onClick={() => setShowStats(false)}
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(123, 98, 65, 0.2)",
+                    backgroundColor: "#f5ead6",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              {statsContent}
+            </div>
+          </div>
+        )}
+
         <div
           style={{
             padding: isCompactMobile ? (isSmallPhone ? "0 1px" : isLargePhone ? "0 4px" : "0 2px") : "0",
@@ -4977,10 +5083,7 @@ export default function Home() {
                       data-rack-gap={index}
                       onDragOver={(e) => {
                         e.preventDefault()
-                        if (draggedTile) setRackDropIndex(index)
-                      }}
-                      onDragLeave={() => {
-                        if (rackDropIndex === index) setRackDropIndex(null)
+                        if (draggedTile) updateRackDropIndex(index)
                       }}
                       onDrop={(e) => {
                         e.preventDefault()
@@ -4989,8 +5092,7 @@ export default function Home() {
                       style={{
                         width: isCompactMobile ? `${compactRackGapWidth}px` : "10px",
                         minHeight: `${rackTileSize + 2}px`,
-                        backgroundColor:
-                          rackDropIndex === index ? "#2563eb" : "transparent",
+                        backgroundColor: "transparent",
                         borderRadius: "999px",
                       }}
                     />
@@ -5000,10 +5102,7 @@ export default function Home() {
                       draggable={!gameOver && tile !== null}
                       onDragOver={(e) => {
                         e.preventDefault()
-                        if (draggedTile) setRackDropIndex(index)
-                      }}
-                      onDragLeave={() => {
-                        if (rackDropIndex === index) setRackDropIndex(null)
+                        if (draggedTile) updateRackDropIndex(index)
                       }}
                       onDrop={(e) => {
                         e.preventDefault()
@@ -5051,12 +5150,17 @@ export default function Home() {
                             ? "0 4px 10px rgba(39,70,117,0.14)"
                             : "0 6px 14px rgba(0,0,0,0.12)",
                         color: "#2f2419",
-                        opacity: tile === null ? 0.55 : draggedTile?.index === index ? 0.6 : 1,
-                        transition: "transform 160ms ease, box-shadow 160ms ease",
+                        opacity: tile === null ? 0.55 : 1,
+                        transition: "transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease",
+                        willChange: draggedTile ? "transform" : undefined,
                         boxSizing: "border-box",
                         touchAction: "none",
                         WebkitUserSelect: "none",
                         userSelect: "none",
+                        transform:
+                          draggedTile?.index === index
+                            ? "scale(1.04)"
+                            : `translateX(${getRackTileShift(index)}px)`,
                       }}
                     >
                       {tile ?? ""}
@@ -5081,10 +5185,10 @@ export default function Home() {
                         data-rack-gap={rack.length}
                         onDragOver={(e) => {
                           e.preventDefault()
-                          if (draggedTile) setRackDropIndex(rack.length)
+                          if (draggedTile) updateRackDropIndex(rack.length)
                         }}
                         onDragLeave={() => {
-                          if (rackDropIndex === rack.length) setRackDropIndex(null)
+                          if (rackDropIndex === rack.length) updateRackDropIndex(null)
                         }}
                         onDrop={(e) => {
                           e.preventDefault()
@@ -5093,8 +5197,7 @@ export default function Home() {
                         style={{
                           width: isCompactMobile ? `${compactRackGapWidth}px` : "10px",
                           minHeight: `${rackTileSize + 2}px`,
-                          backgroundColor:
-                            rackDropIndex === rack.length ? "#2563eb" : "transparent",
+                          backgroundColor: "transparent",
                           borderRadius: "999px",
                         }}
                       />
@@ -5413,35 +5516,39 @@ export default function Home() {
         <div
           style={{
             position: "fixed",
-            left: touchDrag.x - 28,
-            top: touchDrag.y - 22,
-            width: "56px",
-            height: "56px",
-            backgroundColor: "#e7d3a8",
-            border: "2px solid #7b6241",
-            borderRadius: "8px",
+            left: touchDrag.x - 31,
+            top: touchDrag.y - 30,
+            width: "62px",
+            height: "62px",
+            background:
+              "linear-gradient(180deg, rgba(240,220,171,0.99) 0%, rgba(228,202,140,0.99) 100%)",
+            border: "2px solid rgba(123, 98, 65, 0.92)",
+            borderRadius: "10px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: "26px",
-            fontWeight: "bold",
+            fontSize: "30px",
+            fontWeight: 900,
             color: "#2f2419",
             pointerEvents: "none",
             zIndex: 9999,
             opacity: touchDragEngaged ? 0.92 : 0,
-            transform: touchDragEngaged ? "scale(1)" : "scale(0.92)",
-            transition: "opacity 120ms ease, transform 120ms ease",
-            boxShadow: "0 8px 18px rgba(0,0,0,0.22)",
+            transform: touchDragEngaged
+              ? "translateY(-6px) scale(1.08) rotate(-2deg)"
+              : "translateY(0) scale(0.9) rotate(0deg)",
+            transition: "opacity 120ms ease, transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.46), 0 18px 30px rgba(53, 39, 19, 0.24), 0 8px 14px rgba(53, 39, 19, 0.14)",
           }}
         >
           {touchDrag.letter}
           <span
             style={{
               position: "absolute",
-              bottom: "4px",
-              right: "6px",
+              bottom: "5px",
+              right: "7px",
               fontSize: "11px",
-              fontWeight: "bold",
+              fontWeight: 800,
               color: "#4b3a28",
             }}
           >
