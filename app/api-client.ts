@@ -1,6 +1,5 @@
 const API_BASE = "https://api-lexicon.plantos.co"
 const TOKEN_KEY = "lexicon-auth-token"
-const USER_KEY = "lexicon-auth-user"
 const DEVICE_ID_KEY = "lexicon-device-id"
 
 type AuthState = {
@@ -357,8 +356,13 @@ export async function createShareLink(puzzleDate: string, puzzleMode: string, be
   }
 }
 
-export async function loadWordDefinition(word: string): Promise<string | null> {
-  const normalizedWord = word.toLowerCase().replace(/[^a-z]/g, "")
+export async function loadWordDefinition(word: string, locale: "en" | "es" = "en"): Promise<string | null> {
+  const normalizedWord = word
+    .toLowerCase()
+    .replace(/ñ/g, "enyenye")
+    .normalize("NFD")
+    .replace(locale === "es" ? /[^a-zñ]/g : /[^a-z]/g, "")
+    .replace(/enyenye/g, "ñ")
   if (!normalizedWord) return null
 
   const lookupCandidates = Array.from(new Set([
@@ -376,7 +380,9 @@ export async function loadWordDefinition(word: string): Promise<string | null> {
 
   try {
     for (const candidate of lookupCandidates) {
-      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(candidate)}`)
+      const res = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/${locale}/${encodeURIComponent(candidate)}`
+      )
       if (!res.ok) continue
 
       const data = await res.json() as Array<{

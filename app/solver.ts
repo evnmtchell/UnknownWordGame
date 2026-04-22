@@ -1,6 +1,9 @@
 import { VALID_WORDS } from "./words"
+import { SPANISH_VALID_WORDS } from "./words-es"
 import type { DailyPuzzle, BonusType } from "./puzzles"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
+import { SPANISH_LETTER_SCORES } from "./scoring-es"
+import type { LocaleCode } from "./locales"
 
 type PlacedCell = {
   row: number
@@ -21,8 +24,9 @@ function getCellKey(row: number, col: number) {
   return `${row},${col}`
 }
 
-function getPuzzleCacheKey(puzzle: DailyPuzzle) {
+function getPuzzleCacheKey(puzzle: DailyPuzzle, locale: LocaleCode) {
   return [
+    locale,
     puzzle.id,
     puzzle.date,
     puzzle.boardSize,
@@ -38,6 +42,14 @@ function countLetters(letters: string[]) {
     map[letter] = (map[letter] || 0) + 1
   }
   return map
+}
+
+function getWordSet(locale: LocaleCode) {
+  return locale === "es" ? SPANISH_VALID_WORDS : VALID_WORDS
+}
+
+function getLetterScores(locale: LocaleCode) {
+  return locale === "es" ? SPANISH_LETTER_SCORES : LETTER_SCORES
 }
 
 function getBoardLetter(
@@ -177,13 +189,15 @@ function canBuildWordOnBoard(
 
 function scoreWordCells(
   bonusMap: Map<string, BonusType>,
-  cells: Array<PlacedCell & { isNew: boolean }>
+  cells: Array<PlacedCell & { isNew: boolean }>,
+  locale: LocaleCode
 ) {
   let total = 0
   let wordMultiplier = 1
+  const letterScores = getLetterScores(locale)
 
   for (const cell of cells) {
-    let letterScore = cell.isBlank ? 0 : LETTER_SCORES[cell.letter] || 0
+    let letterScore = cell.isBlank ? 0 : letterScores[cell.letter] || 0
 
     if (cell.isNew) {
       const bonus = bonusMap.get(getCellKey(cell.row, cell.col))
@@ -205,7 +219,8 @@ function getCrossWordResult(
   placedMap: Map<string, PlacedCell>,
   bonusMap: Map<string, BonusType>,
   newTile: PlacedCell,
-  mainDirection: "row" | "col"
+  mainDirection: "row" | "col",
+  locale: LocaleCode
 ): { word: string; score: number } | null {
   const crossDir = mainDirection === "row" ? "col" : "row"
   const cells = getWordCellsFromBoard(
@@ -221,11 +236,11 @@ function getCrossWordResult(
 
   const word = cells.map((c) => c.letter).join("")
 
-  return { word, score: scoreWordCells(bonusMap, cells) }
+  return { word, score: scoreWordCells(bonusMap, cells, locale) }
 }
 
-export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
-  const cacheKey = getPuzzleCacheKey(puzzle)
+export function solvePuzzle(puzzle: DailyPuzzle, locale: LocaleCode = "en"): SolverResult {
+  const cacheKey = getPuzzleCacheKey(puzzle, locale)
   const cached = solverCache.get(cacheKey)
   if (cached) {
     return cached
@@ -240,8 +255,9 @@ export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
   let bestScore = 0
   let bestWords: string[] = []
   let bestPlacement: PlacedCell[] = []
+  const wordSet = getWordSet(locale)
 
-  const words = Array.from(VALID_WORDS).filter(
+  const words = Array.from(wordSet).filter(
     (word) => typeof word === "string" && word.length >= 2 && word.length <= puzzle.boardSize
   )
 
@@ -262,7 +278,7 @@ export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
           )
           const mainWord = mainCells.map((cell) => cell.letter).join("")
 
-          if (mainWord.length <= 1 || !VALID_WORDS.has(mainWord)) {
+          if (mainWord.length <= 1 || !wordSet.has(mainWord)) {
             continue
           }
 
@@ -276,10 +292,11 @@ export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
               placedMap,
               bonusMap,
               newTile,
-              direction
+              direction,
+              locale
             )
             if (!cross) continue
-            if (!VALID_WORDS.has(cross.word)) {
+            if (!wordSet.has(cross.word)) {
               hasInvalidCrossWord = true
               break
             }
@@ -288,7 +305,7 @@ export function solvePuzzle(puzzle: DailyPuzzle): SolverResult {
 
           if (hasInvalidCrossWord) continue
 
-          const mainScore = scoreWordCells(bonusMap, mainCells)
+          const mainScore = scoreWordCells(bonusMap, mainCells, locale)
           const crossScore = crossWords.reduce((sum, cw) => sum + cw.score, 0)
           const score = mainScore + crossScore
 

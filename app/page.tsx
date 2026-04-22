@@ -2,9 +2,12 @@
 
 import { startTransition, useEffect, useMemo, useRef, useState } from "react"
 import { VALID_WORDS } from "./words"
+import { SPANISH_VALID_WORDS } from "./words-es"
 import { getPuzzleByDate, DAILY_PUZZLES, type BonusType } from "./puzzles"
 import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
+import { SPANISH_LETTER_SCORES } from "./scoring-es"
+import { getLocaleConfig, getLocaleFromBrowserLanguage, type LocaleCode } from "./locales"
 import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, loadWordDefinition, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink, trackVisit } from "./api-client"
 
 type TileSelection = {
@@ -116,6 +119,7 @@ type PuzzleModeName = "mini" | "easy" | "hard"
 type PuzzleAnalyticsRecord = {
   date: string
   mode: PuzzleModeName
+  locale?: LocaleCode
   bestScore: number
   optimalScore: number
   scorePercent: number
@@ -147,7 +151,10 @@ const SOUND_MUTED_KEY = "daily-word-game-sound-muted"
 const HAPTICS_ENABLED_KEY = "daily-word-game-haptics-enabled"
 const NIGHT_MODE_KEY = "daily-word-game-night-mode"
 const FUTURE_PUZZLE_TEST_MODE_KEY = "daily-word-game-future-puzzle-test-mode"
+const LOCALE_KEY = "daily-word-game-locale"
+const LOCALE_SUGGESTION_DISMISSED_KEY = "daily-word-game-locale-suggestion-dismissed"
 const HOME_BRAND_TILES = ["L", "E", "X", "I", "C", "O", "N"]
+const SPANISH_EXPERIMENT_ENABLED = false
 
 function shuffleArray(items: RackSlot[]) {
   const copy = [...items]
@@ -200,6 +207,18 @@ function getBoardCellKey(row: number, col: number) {
 
 function getLocalDateString(date: Date = new Date()) {
   return new Intl.DateTimeFormat("en-CA").format(date)
+}
+
+function getStorageKey(date: string, mode: "mini" | "easy", locale: LocaleCode) {
+  return `daily-word-game-${date}-${mode}-${locale}`
+}
+
+function getApiModeKey(mode: "mini" | "easy", locale: LocaleCode) {
+  return locale === "en" ? mode : `${mode}-${locale}`
+}
+
+function isLikelyMexico(latitude: number, longitude: number) {
+  return latitude >= 14 && latitude <= 33 && longitude >= -118 && longitude <= -86
 }
 
 function formatDisplayDate(date: string) {
@@ -309,11 +328,18 @@ export default function Home() {
   const [todayDate, setTodayDate] = useState(() => getLocalDateString())
   const todayDisplayDate = useMemo(() => formatDisplayDate(todayDate), [todayDate])
   const [selectedDate, setSelectedDate] = useState(todayDate)
+  const [selectedLocale, setSelectedLocale] = useState<LocaleCode>("en")
   const [selectedMode, setSelectedMode] = useState<"mini" | "easy">("easy")
-  const [loadedGameConfig, setLoadedGameConfig] = useState<{ date: string; mode: "mini" | "easy" }>({
+  const [loadedGameConfig, setLoadedGameConfig] = useState<{
+    date: string
+    mode: "mini" | "easy"
+    locale: LocaleCode
+  }>({
     date: todayDate,
     mode: "easy",
+    locale: "en",
   })
+  const [localeSuggestion, setLocaleSuggestion] = useState<LocaleCode | null>(null)
   const [hasMounted, setHasMounted] = useState(false)
   const [countdownMs, setCountdownMs] = useState(() => getTimeUntilNextLocalDay(new Date()))
   const resetCountdown = useMemo(() => formatCountdown(countdownMs), [countdownMs])
@@ -338,8 +364,21 @@ export default function Home() {
   const returnPlacedTileToRackRef = useRef<((tile: DraggedPlacedTile) => void) | null>(null)
 
   const [puzzleOptimal, setPuzzleOptimal] = useState<{ score: number; words: string[] } | null>(null)
+  const selectedLocaleConfig = useMemo(() => getLocaleConfig(selectedLocale), [selectedLocale])
+  const loadedLocaleConfig = useMemo(
+    () => getLocaleConfig(loadedGameConfig.locale),
+    [loadedGameConfig.locale]
+  )
+  const activeWordSet = useMemo(
+    () => (loadedGameConfig.locale === "es" ? SPANISH_VALID_WORDS : VALID_WORDS),
+    [loadedGameConfig.locale]
+  )
+  const activeLetterScores = useMemo(
+    () => (loadedGameConfig.locale === "es" ? SPANISH_LETTER_SCORES : LETTER_SCORES),
+    [loadedGameConfig.locale]
+  )
   const puzzle = useMemo(
-    () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode),
+    () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode, loadedGameConfig.locale),
     [loadedGameConfig]
   )
   type SolutionType = { bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] }
@@ -367,7 +406,7 @@ export default function Home() {
   const maxAttempts = 3
   const startingRack = puzzle.rack
   const isDesktopHardMode = false
-  const storageKey = `daily-word-game-${puzzle.date}-${loadedGameConfig.mode}`
+  const storageKey = getStorageKey(puzzle.date, loadedGameConfig.mode, loadedGameConfig.locale)
   const boardGap = isCompactMobile ? (isSmallPhone ? 2 : isLargePhone ? 4 : 3) : 4
   const compactBoardShellPadding = isCompactMobile ? (isSmallPhone ? 5 : isLargePhone ? 8 : 6) : 14
   const desktopBoardShellPadding = isDesktopHardMode ? 10 : 14
@@ -581,7 +620,7 @@ export default function Home() {
 
   function getFullSolution() {
     if (fullSolutionRef.current) return fullSolutionRef.current
-    const solved = solvePuzzle(puzzle)
+    const solved = solvePuzzle(puzzle, loadedGameConfig.locale)
     fullSolutionRef.current = solved
     return solved
   }
@@ -733,8 +772,9 @@ export default function Home() {
     }
 
     // Try loading from API first, fall back to localStorage
-    console.log("[lexicon] Loading session for", puzzle.date, loadedGameConfig.mode)
-    loadSession(puzzle.date, loadedGameConfig.mode).then((apiSession) => {
+    const persistedMode = getApiModeKey(loadedGameConfig.mode, loadedGameConfig.locale)
+    console.log("[lexicon] Loading session for", puzzle.date, persistedMode)
+    loadSession(puzzle.date, persistedMode).then((apiSession) => {
       console.log("[lexicon] API session result:", apiSession)
       if (apiSession && apiSession.attempt_history && Array.isArray(apiSession.attempt_history) && apiSession.attempt_history.length > 0) {
         console.log("[lexicon] Applying API session:", apiSession.best_score, "score,", apiSession.attempts_left, "attempts left")
@@ -845,14 +885,63 @@ export default function Home() {
     }
 
     try {
+      if (SPANISH_EXPERIMENT_ENABLED) {
+        const savedLocale = localStorage.getItem(LOCALE_KEY) as LocaleCode | null
+        if (savedLocale === "en" || savedLocale === "es") {
+          setSelectedLocale(savedLocale)
+          setLoadedGameConfig((prev) => ({ ...prev, locale: savedLocale }))
+        } else {
+          const browserSuggestedLocale = getLocaleFromBrowserLanguage(navigator.language)
+          if (browserSuggestedLocale && browserSuggestedLocale !== "en") {
+            setLocaleSuggestion(browserSuggestedLocale)
+          } else if (
+            typeof navigator !== "undefined" &&
+            "permissions" in navigator &&
+            typeof navigator.permissions?.query === "function" &&
+            "geolocation" in navigator
+          ) {
+            navigator.permissions
+              .query({ name: "geolocation" as PermissionName })
+              .then((permissionStatus) => {
+                if (permissionStatus.state !== "granted") return
+                navigator.geolocation.getCurrentPosition(
+                  (position) => {
+                    if (
+                      isLikelyMexico(position.coords.latitude, position.coords.longitude) &&
+                      !localStorage.getItem(LOCALE_SUGGESTION_DISMISSED_KEY)
+                    ) {
+                      setLocaleSuggestion("es")
+                    }
+                  },
+                  () => {
+                    // ignore
+                  },
+                  { maximumAge: 60_000 * 60 }
+                )
+              })
+              .catch(() => {
+                // ignore
+              })
+          }
+        }
+      } else {
+        setSelectedLocale("en")
+        setLoadedGameConfig((prev) => ({ ...prev, locale: "en" }))
+        setLocaleSuggestion(null)
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
       setHasSavedTodayGame(
-        Boolean(localStorage.getItem(`daily-word-game-${todayDate}-mini`)) ||
-          Boolean(localStorage.getItem(`daily-word-game-${todayDate}-easy`))
+        Boolean(localStorage.getItem(getStorageKey(todayDate, "mini", loadedGameConfig.locale))) ||
+          Boolean(localStorage.getItem(getStorageKey(todayDate, "easy", loadedGameConfig.locale)))
       )
     } catch {
       // ignore
     }
-  }, [storageKey, todayDate])
+  }, [storageKey, todayDate, loadedGameConfig.locale, loadedGameConfig.mode, puzzle.date])
 
   useEffect(() => {
     try {
@@ -893,14 +982,15 @@ export default function Home() {
   useEffect(() => {
     try {
       setHasSavedTodayGame(
-        Boolean(localStorage.getItem(`daily-word-game-${todayDate}-mini`)) ||
-          Boolean(localStorage.getItem(`daily-word-game-${todayDate}-easy`))
+        Boolean(localStorage.getItem(getStorageKey(todayDate, "mini", selectedLocale))) ||
+          Boolean(localStorage.getItem(getStorageKey(todayDate, "easy", selectedLocale)))
       )
     } catch {
       // ignore
     }
   }, [
     todayDate,
+    selectedLocale,
     attemptsLeft,
     bestScore,
     attemptHistory,
@@ -928,9 +1018,21 @@ export default function Home() {
 
     if (loadedGameConfig.date === previousTodayDate) {
       setLoadedGameConfig((prev) => ({ ...prev, date: todayDate }))
-      applyFreshPuzzleState(todayDate, loadedGameConfig.mode, "A new daily puzzle is ready.")
+      applyFreshPuzzleState(
+        todayDate,
+        loadedGameConfig.mode,
+        loadedGameConfig.locale,
+        "A new daily puzzle is ready."
+      )
     }
-  }, [todayDate, selectedDate, archiveMonthKey, loadedGameConfig.date, loadedGameConfig.mode])
+  }, [
+    todayDate,
+    selectedDate,
+    archiveMonthKey,
+    loadedGameConfig.date,
+    loadedGameConfig.mode,
+    loadedGameConfig.locale,
+  ])
 
   useEffect(() => {
     try {
@@ -938,7 +1040,9 @@ export default function Home() {
 
       for (const puzzleEntry of DAILY_PUZZLES) {
         for (const mode of ["mini", "easy"] as const) {
-          const saved = localStorage.getItem(`daily-word-game-${puzzleEntry.date}-${mode}`)
+          const saved = localStorage.getItem(
+            getStorageKey(puzzleEntry.date, mode, selectedLocale)
+          )
           if (!saved) continue
 
           try {
@@ -985,6 +1089,8 @@ export default function Home() {
     hintLevel,
     hasLoadedSave,
     selectedDate,
+    selectedLocale,
+    loadedGameConfig.mode,
   ])
 
   useEffect(() => {
@@ -1066,7 +1172,7 @@ export default function Home() {
 
     saveSession({
       date: puzzle.date,
-      mode: loadedGameConfig.mode,
+      mode: getApiModeKey(loadedGameConfig.mode, loadedGameConfig.locale),
       attempts_left: attemptsLeft,
       best_score: bestScore,
       attempt_history: attemptHistory,
@@ -1090,6 +1196,7 @@ export default function Home() {
     hasLoadedSave,
     puzzle.date,
     loadedGameConfig.mode,
+    loadedGameConfig.locale,
   ])
 
   function getFixedCellLetter(row: number, col: number) {
@@ -1739,7 +1846,7 @@ export default function Home() {
     let wordMultiplier = 1
 
     for (const cell of cells) {
-      let letterScore = cell.isBlank ? 0 : LETTER_SCORES[cell.letter] || 0
+      let letterScore = cell.isBlank ? 0 : activeLetterScores[cell.letter] || 0
 
       if (isPlacedTile(cell.row, cell.col)) {
         const bonus = getBonusAt(cell.row, cell.col)
@@ -1873,7 +1980,7 @@ export default function Home() {
     }
 
     for (const item of wordsFormed) {
-      if (!VALID_WORDS.has(item.word)) {
+      if (!activeWordSet.has(item.word)) {
         setMessage(`${item.word} is not in the word list.`)
         return
       }
@@ -1938,6 +2045,7 @@ export default function Home() {
       updateStats(rating, {
         date: puzzle.date,
         mode: loadedGameConfig.mode,
+        locale: loadedGameConfig.locale,
         bestScore: newBestScore,
         optimalScore: solutionForSubmit.bestScore,
         scorePercent: solutionForSubmit.bestScore > 0 ? newBestScore / solutionForSubmit.bestScore : 0,
@@ -1966,7 +2074,7 @@ export default function Home() {
       : null
     saveSession({
       date: puzzle.date,
-      mode: loadedGameConfig.mode,
+      mode: getApiModeKey(loadedGameConfig.mode, loadedGameConfig.locale),
       attempts_left: newAttemptsLeft,
       best_score: newBestScore,
       attempt_history: updatedHistory,
@@ -1993,12 +2101,17 @@ export default function Home() {
     setMessage("Board cleared. Start a new move.")
   }
 
-  function applyFreshPuzzleState(date: string, mode: "mini" | "easy", nextMessage: string) {
-    const freshPuzzle = getPuzzleByDate(date, mode)
+  function applyFreshPuzzleState(
+    date: string,
+    mode: "mini" | "easy",
+    locale: LocaleCode,
+    nextMessage: string
+  ) {
+    const freshPuzzle = getPuzzleByDate(date, mode, locale)
 
     setPuzzleOptimal(null)
     fullSolutionRef.current = null
-    loadPuzzleOptimal(date, mode)
+    loadPuzzleOptimal(date, getApiModeKey(mode, locale))
       .then((opt) => {
         if (opt && opt.optimal_score > 0) {
           setPuzzleOptimal({ score: opt.optimal_score, words: opt.optimal_words })
@@ -2036,11 +2149,16 @@ export default function Home() {
       // ignore
     }
 
-    applyFreshPuzzleState(loadedGameConfig.date, loadedGameConfig.mode, "Puzzle reset. Start a new run.")
+    applyFreshPuzzleState(
+      loadedGameConfig.date,
+      loadedGameConfig.mode,
+      loadedGameConfig.locale,
+      "Puzzle reset. Start a new run."
+    )
 
     saveSession({
       date: puzzle.date,
-      mode: loadedGameConfig.mode,
+      mode: getApiModeKey(loadedGameConfig.mode, loadedGameConfig.locale),
       attempts_left: maxAttempts,
       best_score: 0,
       attempt_history: [],
@@ -2151,16 +2269,47 @@ export default function Home() {
     setShowAuth(false)
   }
 
-  function selectPuzzleDate(date: string, mode: "mini" | "easy" = selectedMode) {
-    applyFreshPuzzleState(date, mode, "Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square.")
-    setLoadedGameConfig({ date, mode })
+  function applyLocaleSelection(locale: LocaleCode, options?: { dismissSuggestion?: boolean }) {
+    const nextLocale = SPANISH_EXPERIMENT_ENABLED ? locale : "en"
+    setSelectedLocale(nextLocale)
+    try {
+      localStorage.setItem(LOCALE_KEY, nextLocale)
+      if (options?.dismissSuggestion) {
+        localStorage.setItem(LOCALE_SUGGESTION_DISMISSED_KEY, "1")
+      }
+    } catch {
+      // ignore
+    }
+    setLocaleSuggestion(null)
+
+    if (viewMode === "game") {
+      selectPuzzleDate(loadedGameConfig.date, loadedGameConfig.mode, nextLocale)
+      return
+    }
+
+    setLoadedGameConfig((prev) => ({ ...prev, locale: nextLocale }))
+  }
+
+  function selectPuzzleDate(
+    date: string,
+    mode: "mini" | "easy" = selectedMode,
+    locale: LocaleCode = selectedLocale
+  ) {
+    applyFreshPuzzleState(
+      date,
+      mode,
+      locale,
+      "Drag a tile onto the board, drag rack tiles between slots, or click a tile and then click a square."
+    )
+    setLoadedGameConfig({ date, mode, locale })
     setSelectedMode(mode)
+    setSelectedLocale(locale)
     setViewMode("game")
     setSelectedDate(date)
 
     // Load saved state from API, fall back to localStorage
-    const key = `daily-word-game-${date}-${mode}`
-    loadSession(date, mode).then((apiSession) => {
+    const key = getStorageKey(date, mode, locale)
+    loadSession(date, getApiModeKey(mode, locale)).then((apiSession) => {
       if (apiSession && Array.isArray(apiSession.attempt_history) && apiSession.attempt_history.length > 0) {
         setAttemptsLeft(apiSession.attempts_left)
         setBestScore(apiSession.best_score)
@@ -2494,7 +2643,7 @@ export default function Home() {
 
     async function loadOptimalDefinition() {
       for (const word of definitionCandidates) {
-        const definition = await loadWordDefinition(word)
+        const definition = await loadWordDefinition(word, loadedLocaleConfig.definitionLocale)
         if (cancelled) return
         if (definition) {
           setOptimalDefinition(definition)
@@ -2515,7 +2664,13 @@ export default function Home() {
     return () => {
       cancelled = true
     }
-  }, [showResultsModal, gameOver, primaryOptimalWord, solution.bestWords])
+  }, [
+    showResultsModal,
+    gameOver,
+    primaryOptimalWord,
+    solution.bestWords,
+    loadedLocaleConfig.definitionLocale,
+  ])
 
   function getRating() {
     if (solution.bestScore <= 0) return ""
@@ -2628,10 +2783,11 @@ export default function Home() {
   }
 
   async function shareResults() {
+    const localeTitle = loadedGameConfig.locale === "es" ? "Lexicon Español" : "Lexicon"
     const header =
       loadedGameConfig.mode === "mini"
-        ? `Lexicon Mini ${formatDisplayDate(puzzle.date)}`
-        : `Lexicon ${formatDisplayDate(puzzle.date)}`
+        ? `${localeTitle} ${loadedLocaleConfig.labels.miniMode} ${formatDisplayDate(puzzle.date)}`
+        : `${localeTitle} ${formatDisplayDate(puzzle.date)}`
     const rating = getRating()
     const summary = isPerfectFirstTryRun()
       ? loadedGameConfig.mode === "mini"
@@ -2647,7 +2803,11 @@ export default function Home() {
     })
 
     // Generate tracked share link
-    const refCode = await createShareLink(puzzle.date, loadedGameConfig.mode, bestScore)
+    const refCode = await createShareLink(
+      puzzle.date,
+      getApiModeKey(loadedGameConfig.mode, loadedGameConfig.locale),
+      bestScore
+    )
     const shareUrl = refCode
       ? `https://dinkdaddy.org?ref=${refCode}`
       : "https://dinkdaddy.org"
@@ -2691,7 +2851,7 @@ export default function Home() {
   const hasValidDraftLine =
     placedTiles.length === 0 || currentDraftDirection !== null
   const allWordPreviews = hasValidDraftLine ? getAllWordPreviews() : []
-  const validWordPreviews = allWordPreviews.filter((preview) => VALID_WORDS.has(preview.word))
+  const validWordPreviews = allWordPreviews.filter((preview) => activeWordSet.has(preview.word))
   const validWordHighlightCells = new Set(
     validWordPreviews.flatMap((preview) =>
       preview.cells.map((cell) => getBoardCellKey(cell.row, cell.col))
@@ -3432,7 +3592,7 @@ export default function Home() {
                           color: "rgba(47, 36, 25, 0.45)",
                         }}
                       >
-                        {LETTER_SCORES[letter] ?? 0}
+                        {activeLetterScores[letter] ?? 0}
                       </span>
                     </div>
                   </div>
@@ -3451,7 +3611,7 @@ export default function Home() {
                   fontWeight: 600,
                 }}
               >
-                Build the strongest play
+                {selectedLocaleConfig.labels.buildStrongestPlay}
               </p>
               <div
                 style={{
@@ -3463,9 +3623,114 @@ export default function Home() {
                   textTransform: "uppercase",
                 }}
               >
-                {todayDisplayDate} · Next {hasMounted ? resetCountdown : "--:--:--"}
+                {todayDisplayDate} · {selectedLocaleConfig.labels.nextPuzzleIn}{" "}
+                {hasMounted ? resetCountdown : "--:--:--"}
               </div>
             </div>
+
+            {SPANISH_EXPERIMENT_ENABLED && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  marginTop: isCompactMobile ? "2px" : "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "4px",
+                    borderRadius: "999px",
+                    background: "rgba(255,250,240,0.9)",
+                    border: "1px solid rgba(123, 98, 65, 0.14)",
+                    boxShadow: "0 8px 18px rgba(78, 56, 28, 0.06)",
+                  }}
+                >
+                  {(["en", "es"] as const).map((localeCode) => {
+                    const locale = getLocaleConfig(localeCode)
+                    const isSelected = selectedLocale === localeCode
+                    return (
+                      <button
+                        key={localeCode}
+                        onClick={() => applyLocaleSelection(localeCode, { dismissSuggestion: true })}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "999px",
+                          border: "none",
+                          cursor: "pointer",
+                          background: isSelected ? "#2f2419" : "transparent",
+                          color: isSelected ? "#fffaf1" : "#5e4930",
+                          fontWeight: 800,
+                          fontSize: isCompactMobile ? "12px" : "13px",
+                        }}
+                      >
+                        {locale.labels[localeCode === "en" ? "english" : "spanish"]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {SPANISH_EXPERIMENT_ENABLED && localeSuggestion === "es" && selectedLocale !== "es" && (
+              <div
+                style={{
+                  maxWidth: "520px",
+                  margin: "0 auto",
+                  padding: isCompactMobile ? "12px 14px" : "14px 16px",
+                  borderRadius: "18px",
+                  border: "1px solid rgba(123, 98, 65, 0.14)",
+                  background: "rgba(255,250,240,0.92)",
+                  boxShadow: "0 14px 26px rgba(78, 56, 28, 0.08)",
+                }}
+              >
+                <div style={{ fontWeight: 800, color: "#2f2419", marginBottom: "4px" }}>
+                  {selectedLocaleConfig.labels.suggestedForMexico}
+                </div>
+                <div style={{ fontSize: "14px", color: "#6d5537", lineHeight: 1.45 }}>
+                  We can switch the interface and keep Spanish progress separate from your English game.
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "10px" }}>
+                  <button
+                    onClick={() => applyLocaleSelection("es", { dismissSuggestion: true })}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: "999px",
+                      border: "none",
+                      background: "#2f2419",
+                      color: "#fffaf1",
+                      cursor: "pointer",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {selectedLocaleConfig.labels.switchToSpanish}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLocaleSuggestion(null)
+                      try {
+                        localStorage.setItem(LOCALE_SUGGESTION_DISMISSED_KEY, "1")
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: "999px",
+                      border: "1px solid rgba(123, 98, 65, 0.18)",
+                      background: "rgba(255,250,240,0.92)",
+                      color: "#5e4930",
+                      cursor: "pointer",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {selectedLocaleConfig.labels.notNow}
+                  </button>
+                </div>
+              </div>
+            )}
 
               <div
                 style={{
@@ -3488,10 +3753,12 @@ export default function Home() {
                 }}
               >
                 <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
-                  {hasSavedTodayGame ? "Continue" : "Start"}
+                  {hasSavedTodayGame
+                    ? selectedLocaleConfig.labels.continue
+                    : selectedLocaleConfig.labels.start}
                 </div>
                 <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  Play Daily
+                  {selectedLocaleConfig.labels.playDaily}
                 </div>
               </button>
 
@@ -3507,10 +3774,10 @@ export default function Home() {
                 style={homeActionButtonStyle}
               >
                 <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
-                  Browse
+                  {selectedLocaleConfig.labels.browse}
                 </div>
                 <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  Open Archive
+                  {selectedLocaleConfig.labels.openArchive}
                 </div>
               </button>
 
@@ -3525,10 +3792,12 @@ export default function Home() {
                 style={homeActionButtonStyle}
               >
                 <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
-                  Progress
+                  {selectedLocaleConfig.labels.progress}
                 </div>
                 <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  {showStats ? "Hide Stats" : "View Stats"}
+                  {showStats
+                    ? selectedLocaleConfig.labels.hideStats
+                    : selectedLocaleConfig.labels.viewStats}
                 </div>
               </button>
 
@@ -3545,10 +3814,14 @@ export default function Home() {
                 style={homeActionButtonStyle}
               >
                 <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
-                  Account
+                  {selectedLocaleConfig.labels.account}
                 </div>
                 <div style={{ fontSize: isCompactMobile ? "22px" : "24px", lineHeight: 1.15, marginTop: "4px" }}>
-                  {hasMounted ? (currentUser && !currentUser.anon ? currentUser.username : "Sign In") : "Sign In"}
+                  {hasMounted
+                    ? (currentUser && !currentUser.anon
+                        ? currentUser.username
+                        : selectedLocaleConfig.labels.signIn)
+                    : selectedLocaleConfig.labels.signIn}
                 </div>
               </button>
             </div>
@@ -3659,8 +3932,47 @@ export default function Home() {
                   fontWeight: 500,
                 }}
               >
-                Choose your daily board.
+                {selectedLocaleConfig.labels.chooseYourDailyBoard}
               </p>
+
+              {SPANISH_EXPERIMENT_ENABLED && (
+                <div
+                  style={{
+                    marginTop: isCompactMobile ? "14px" : "18px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "4px",
+                    borderRadius: "999px",
+                    background: "rgba(255,250,240,0.84)",
+                    border: "1px solid rgba(123, 98, 65, 0.14)",
+                  }}
+                >
+                  {(["en", "es"] as const).map((localeCode) => {
+                    const locale = getLocaleConfig(localeCode)
+                    const isSelected = selectedLocale === localeCode
+                    return (
+                      <button
+                        key={localeCode}
+                        onClick={() => applyLocaleSelection(localeCode, { dismissSuggestion: true })}
+                        style={{
+                          padding: isCompactMobile ? "9px 12px" : "10px 14px",
+                          borderRadius: "999px",
+                          border: "none",
+                          background: isSelected ? "#fffaf1" : "transparent",
+                          color: isSelected ? "#2f2419" : "#3d2a38",
+                          cursor: "pointer",
+                          fontSize: isCompactMobile ? (isSmallPhone ? "13px" : "14px") : "15px",
+                          fontWeight: 800,
+                          boxShadow: isSelected ? "0 4px 10px rgba(61, 42, 56, 0.08)" : "none",
+                        }}
+                      >
+                        {locale.labels[localeCode === "en" ? "english" : "spanish"]}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               <div
                 style={{
@@ -3676,8 +3988,8 @@ export default function Home() {
                 }}
               >
                 {([
-                  { key: "mini", label: "Mini" },
-                  { key: "easy", label: "Classic" },
+                  { key: "mini", label: selectedLocaleConfig.labels.miniMode },
+                  { key: "easy", label: selectedLocaleConfig.labels.classicMode },
                 ] as const).map((mode) => {
                   const isSelected = selectedMode === mode.key
                   return (
@@ -3718,7 +4030,7 @@ export default function Home() {
                   boxShadow: "0 12px 24px rgba(23,18,13,0.2)",
                 }}
               >
-                Play
+                {selectedLocaleConfig.labels.play}
               </button>
 
               <div
@@ -3739,7 +4051,7 @@ export default function Home() {
                   fontWeight: 700,
                 }}
               >
-                Next puzzle in {hasMounted ? resetCountdown : "--:--:--"}
+                {selectedLocaleConfig.labels.nextPuzzleIn} {hasMounted ? resetCountdown : "--:--:--"}
               </div>
               <div
                 style={{
@@ -3749,12 +4061,29 @@ export default function Home() {
                   color: "#4f384b",
                 }}
               >
-                Puzzle by Lexicon
+                {selectedLocaleConfig.labels.puzzleBy}
                 <br />
                 {selectedMode === "mini"
-                  ? "Mini gives you a quicker 5x5 board."
-                  : "Classic keeps the 7x7 board."}
+                  ? selectedLocaleConfig.labels.miniDescription
+                  : selectedLocaleConfig.labels.classicDescription}
               </div>
+
+              {SPANISH_EXPERIMENT_ENABLED && selectedLocale === "es" && (
+                <div
+                  style={{
+                    marginTop: "12px",
+                    padding: "10px 12px",
+                    borderRadius: "12px",
+                    background: "rgba(255,250,240,0.58)",
+                    border: "1px solid rgba(123, 98, 65, 0.12)",
+                    fontSize: isCompactMobile ? "13px" : "14px",
+                    color: "#5e4930",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {selectedLocaleConfig.labels.localeBetaNote}
+                </div>
+              )}
 
               {(!currentUser || currentUser.anon) ? (
                 <button
@@ -3771,11 +4100,11 @@ export default function Home() {
                     padding: "4px",
                   }}
                 >
-                  Sign in to save progress
+                  {selectedLocaleConfig.labels.signInToSave}
                 </button>
               ) : (
                 <div style={{ marginTop: "16px", fontSize: isCompactMobile ? "14px" : "15px", color: "#6d5537", fontWeight: 700 }}>
-                  Playing as {currentUser.username}
+                  {selectedLocaleConfig.labels.account}: {currentUser.username}
                 </div>
               )}
             </div>
@@ -3913,7 +4242,7 @@ export default function Home() {
                   boxShadow: "0 8px 18px rgba(78, 56, 28, 0.06)",
                 }}
               >
-                Home
+                {loadedLocaleConfig.labels.home}
               </button>
               <span
                 style={{
@@ -3928,7 +4257,9 @@ export default function Home() {
                   fontWeight: 800,
                 }}
               >
-                {loadedGameConfig.mode === "mini" ? "Mini" : "Classic"}
+                {loadedGameConfig.mode === "mini"
+                  ? loadedLocaleConfig.labels.miniMode
+                  : loadedLocaleConfig.labels.classicMode}
               </span>
             </div>
             <button
@@ -3945,7 +4276,7 @@ export default function Home() {
                 boxShadow: "0 8px 18px rgba(78, 56, 28, 0.06)",
               }}
             >
-              How to Play
+              {loadedLocaleConfig.labels.howToPlay}
             </button>
           </div>
         )}
@@ -3968,7 +4299,11 @@ export default function Home() {
               }}
             >
               <strong>{formatDisplayDate(puzzle.date)}</strong> ·{" "}
-              <strong>{loadedGameConfig.mode === "mini" ? "Mini" : "Classic"}</strong>
+              <strong>
+                {loadedGameConfig.mode === "mini"
+                  ? loadedLocaleConfig.labels.miniMode
+                  : loadedLocaleConfig.labels.classicMode}
+              </strong>
             </div>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -3985,7 +4320,7 @@ export default function Home() {
                   fontWeight: "bold",
                 }}
               >
-                Stats
+                {loadedLocaleConfig.labels.stats}
               </button>
               <button
                 onClick={goHome}
@@ -4000,7 +4335,7 @@ export default function Home() {
                   fontWeight: "bold",
                 }}
               >
-                Home
+                {loadedLocaleConfig.labels.home}
               </button>
               <button
                 onClick={() => setShowTutorial(true)}
@@ -4015,7 +4350,7 @@ export default function Home() {
                   fontWeight: "bold",
                 }}
               >
-                How to Play
+                {loadedLocaleConfig.labels.howToPlay}
               </button>
             </div>
           </div>
@@ -4641,7 +4976,7 @@ export default function Home() {
                                       alignItems: "center",
                                       justifyContent: "center",
                                       position: "relative",
-                                      color: "#2f2419",
+                                        color: "#2f2419",
                                       fontWeight: 800,
                                       fontSize: isCompactMobile ? "11px" : "13px",
                                     }}
@@ -4657,7 +4992,7 @@ export default function Home() {
                                         color: "#4b3a28",
                                       }}
                                     >
-                                      {placement.isBlank ? 0 : LETTER_SCORES[placement.letter] || 0}
+                                      {placement.isBlank ? 0 : activeLetterScores[placement.letter] || 0}
                                     </span>
                                   </div>
                                 ))}
@@ -4675,7 +5010,7 @@ export default function Home() {
                                   color: "#4b3a28",
                                 }}
                               >
-                                {latestPlacement?.isBlank ? 0 : LETTER_SCORES[reviewLetter] || 0}
+                                {latestPlacement?.isBlank ? 0 : activeLetterScores[reviewLetter] || 0}
                               </span>
                             )}
                           </div>
@@ -4747,7 +5082,7 @@ export default function Home() {
                 const letterScore = displayLetter
                   ? placedTile?.isBlank
                     ? 0
-                    : LETTER_SCORES[displayLetter] || 0
+                    : activeLetterScores[displayLetter] || 0
                   : 0
                 const isMovablePlacedTile = Boolean(placedTile)
                 const isRecentlyPlacedTile = recentPlacementKey === `${row}-${col}` && Boolean(placedTile)
@@ -5197,7 +5532,7 @@ export default function Home() {
                             color: "#4b3a28",
                           }}
                         >
-                          {tile === BLANK_TILE ? 0 : LETTER_SCORES[tile] || 0}
+                          {tile === BLANK_TILE ? 0 : activeLetterScores[tile] || 0}
                         </span>
                       )}
                     </div>
@@ -5574,7 +5909,7 @@ export default function Home() {
               color: "#4b3a28",
             }}
           >
-            {touchDrag.isBlank ? 0 : LETTER_SCORES[touchDrag.letter] || 0}
+            {touchDrag.isBlank ? 0 : activeLetterScores[touchDrag.letter] || 0}
           </span>
         </div>
       )}
@@ -5634,6 +5969,64 @@ export default function Home() {
                 ×
               </button>
             </div>
+
+            {SPANISH_EXPERIMENT_ENABLED && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "14px",
+                  padding: "14px 0",
+                  borderTop: "1px solid rgba(123, 98, 65, 0.12)",
+                  borderBottom: "1px solid rgba(123, 98, 65, 0.12)",
+                  marginBottom: "2px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "16px", fontWeight: 800 }}>
+                    {loadedLocaleConfig.labels.language}
+                  </div>
+                  <div style={{ marginTop: "4px", fontSize: "13px", lineHeight: 1.4, color: "#6d5537" }}>
+                    Switch between Lexicon and Lexicon Español without mixing saves.
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "4px",
+                    borderRadius: "999px",
+                    background: "rgba(255,250,240,0.9)",
+                    border: "1px solid rgba(123, 98, 65, 0.14)",
+                  }}
+                >
+                  {(["en", "es"] as const).map((localeCode) => {
+                    const locale = getLocaleConfig(localeCode)
+                    const isSelected = selectedLocale === localeCode
+                    return (
+                      <button
+                        key={localeCode}
+                        onClick={() => applyLocaleSelection(localeCode, { dismissSuggestion: true })}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: "999px",
+                          border: "none",
+                          background: isSelected ? "#2f2419" : "transparent",
+                          color: isSelected ? "#fffaf1" : "#5e4930",
+                          cursor: "pointer",
+                          fontWeight: 800,
+                          fontSize: "13px",
+                        }}
+                      >
+                        {locale.labels[localeCode === "en" ? "english" : "spanish"]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {[
               {
@@ -5999,7 +6392,7 @@ export default function Home() {
                 color: "#171717",
               }}
             >
-              Choose Letter
+              {loadedLocaleConfig.code === "es" ? "Elige letra" : "Choose Letter"}
             </div>
             <div
               style={{
@@ -6007,7 +6400,7 @@ export default function Home() {
                 gap: "6px",
               }}
             >
-              {["ABCDEFG", "HIJKLMN", "OPQRSTU", "VWXYZ"].map((rowLetters) => (
+              {loadedLocaleConfig.blankTileRows.map((rowLetters) => (
                 <div
                   key={rowLetters}
                   style={{
@@ -6016,7 +6409,7 @@ export default function Home() {
                     gap: "6px",
                   }}
                 >
-                  {rowLetters === "VWXYZ" && <div aria-hidden="true" />}
+                  {rowLetters.length === 5 && <div aria-hidden="true" />}
                   {rowLetters.split("").map((letter) => (
                     <button
                       key={letter}
@@ -6039,7 +6432,7 @@ export default function Home() {
                       {letter}
                     </button>
                   ))}
-                  {rowLetters === "VWXYZ" && <div aria-hidden="true" />}
+                  {rowLetters.length === 5 && <div aria-hidden="true" />}
                 </div>
               ))}
             </div>

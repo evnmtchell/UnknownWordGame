@@ -1,4 +1,7 @@
 import { VALID_WORDS } from "./words"
+import { SPANISH_VALID_WORDS } from "./words-es"
+import type { LocaleCode } from "./locales"
+import { SPANISH_RACK_TILE_BAG, SPANISH_RACK_VOWELS } from "./scoring-es"
 
 export type BonusType = "DL" | "TL" | "DW" | "TW"
 
@@ -106,9 +109,9 @@ function everyCellBelongsToAWord(filledCells: PuzzleCell[]) {
   return filledCells.every((cell) => cellsInWords.has(`${cell.row},${cell.col}`))
 }
 
-function allRunsAreValidWords(filledCells: PuzzleCell[]) {
+function allRunsAreValidWords(filledCells: PuzzleCell[], wordSet: Set<string> = VALID_WORDS) {
   return getStartingWordRuns(filledCells).every((run) =>
-    VALID_WORDS.has(run.map((cell) => cell.letter).join(""))
+    wordSet.has(run.map((cell) => cell.letter).join(""))
   )
 }
 
@@ -117,7 +120,8 @@ function validatePuzzleLayout(
   options: { minWords: number; maxWords?: number; minLength?: number; maxLength?: number } = {
     minWords: 2,
     maxWords: 4,
-  }
+  },
+  wordSet: Set<string> = VALID_WORDS
 ) {
   const center = Math.floor(puzzle.boardSize / 2)
   const centerCovered = puzzle.filledCells.some(
@@ -138,7 +142,7 @@ function validatePuzzleLayout(
     )
   }
 
-  if (!allRunsAreValidWords(puzzle.filledCells)) {
+  if (!allRunsAreValidWords(puzzle.filledCells, wordSet)) {
     throw new Error(`${puzzle.id} (${puzzle.date}) must use only valid words in every run.`)
   }
 
@@ -241,9 +245,21 @@ const RACK_TILE_BAG = [
   ..."AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ??",
 ]
 
-function generateRackForSeed(length: number, seedText: string) {
+function getWordSetForLocale(locale: LocaleCode) {
+  return locale === "es" ? SPANISH_VALID_WORDS : VALID_WORDS
+}
+
+function getRackBagForLocale(locale: LocaleCode) {
+  return locale === "es" ? SPANISH_RACK_TILE_BAG : RACK_TILE_BAG
+}
+
+function getVowelsForLocale(locale: LocaleCode) {
+  return locale === "es" ? SPANISH_RACK_VOWELS : ["A", "E", "I", "O", "U"]
+}
+
+function generateRackForSeed(length: number, seedText: string, locale: LocaleCode = "en") {
   const random = createSeededRandom(seedText)
-  const bag = [...RACK_TILE_BAG]
+  const bag = [...getRackBagForLocale(locale)]
   const rack: string[] = []
 
   for (let index = 0; index < length && bag.length > 0; index++) {
@@ -251,10 +267,11 @@ function generateRackForSeed(length: number, seedText: string) {
     rack.push(bag.splice(bagIndex, 1)[0])
   }
 
-  const vowelCount = rack.filter((letter) => ["A", "E", "I", "O", "U"].includes(letter)).length
+  const vowels = getVowelsForLocale(locale)
+  const vowelCount = rack.filter((letter) => vowels.includes(letter)).length
   if (vowelCount < 2 && rack.length > 0) {
-    const vowelBag = ["A", "E", "I", "O", "U"]
-    const replaceIndex = rack.findIndex((letter) => !["A", "E", "I", "O", "U", "?"].includes(letter))
+    const vowelBag = vowels
+    const replaceIndex = rack.findIndex((letter) => ![...vowels, "?"].includes(letter))
     if (replaceIndex >= 0) {
       rack[replaceIndex] = vowelBag[Math.floor(random() * vowelBag.length)]
     }
@@ -376,6 +393,43 @@ const miniModeTemplates: MiniLayoutTemplate[] = [
       { direction: "down", row: 1, col: 2, length: 3 },
     ],
     fills: [["SMILE", "GAS", "PIN"]],
+  },
+]
+
+const spanishMiniModeTemplates: MiniLayoutTemplate[] = [
+  {
+    slots: [
+      { direction: "across", row: 2, col: 0, length: 5 },
+      { direction: "down", row: 0, col: 1, length: 4 },
+      { direction: "down", row: 1, col: 3, length: 3 },
+    ],
+    fills: [
+      ["RATON", "REAL", "SOL"],
+      ["LIMON", "UNIR", "SOL"],
+      ["SALON", "REAL", "SOL"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 2, col: 0, length: 5 },
+      { direction: "down", row: 0, col: 2, length: 5 },
+      { direction: "down", row: 1, col: 4, length: 3 },
+    ],
+    fills: [
+      ["MANGO", "TENOR", "SOL"],
+      ["PERRO", "ARROZ", "SOL"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 2, col: 0, length: 5 },
+      { direction: "down", row: 0, col: 2, length: 3 },
+      { direction: "down", row: 1, col: 4, length: 3 },
+    ],
+    fills: [
+      ["LUNAS", "TEN", "ESO"],
+      ["MESAS", "DOS", "ESO"],
+    ],
   },
 ]
 
@@ -545,6 +599,117 @@ const easyModeTemplates: EasyLayoutTemplate[] = [
   },
 ]
 
+const spanishEasyModeTemplates: EasyLayoutTemplate[] = [
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 2, length: 4 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [
+      ["RATON", "REAL", "SOL"],
+      ["LIMON", "UNIR", "SOL"],
+      ["SALON", "REAL", "SOL"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 2, col: 2, length: 3 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [
+      ["LUNAS", "SUR", "PAN"],
+      ["MESAS", "SER", "PAN"],
+      ["SOLAR", "SOL", "PAN"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 2, length: 5 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [
+      ["LIMON", "UNIDO", "SOL"],
+      ["CASAS", "PLAZA", "PAN"],
+      ["RATON", "PLAZA", "SOL"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 3, length: 5 },
+      { direction: "down", row: 2, col: 5, length: 3 },
+    ],
+    fills: [
+      ["PERRO", "ARROZ", "SOL"],
+      ["MANGO", "TENOR", "SOL"],
+      ["MESAS", "VISOR", "ESO"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 1, length: 5 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [
+      ["MESAS", "TEMOR", "PAN"],
+      ["SOLAR", "VISOR", "PAN"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 6 },
+      { direction: "down", row: 1, col: 1, length: 4 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [
+      ["TIERRA", "UNIR", "ERA"],
+      ["MONTES", "AMOR", "VER"],
+    ],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 6 },
+      { direction: "down", row: 2, col: 3, length: 3 },
+      { direction: "down", row: 2, col: 5, length: 3 },
+    ],
+    fills: [["TESORO", "ESO", "ERA"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 7 },
+      { direction: "down", row: 1, col: 1, length: 5 },
+      { direction: "down", row: 2, col: 4, length: 3 },
+    ],
+    fills: [["VENTANA", "SUELO", "PAN"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 7 },
+      { direction: "down", row: 1, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 5, length: 4 },
+    ],
+    fills: [["PLANETA", "MOLAR", "RATA"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 0, length: 6 },
+      { direction: "down", row: 1, col: 3, length: 5 },
+    ],
+    fills: [["CAMINO", "UNIDO"]],
+  },
+  {
+    slots: [
+      { direction: "across", row: 3, col: 1, length: 5 },
+      { direction: "down", row: 1, col: 3, length: 5 },
+    ],
+    fills: [["MESAS", "VISOR"]],
+  },
+]
+
 const easyModeTransforms: EasyTransform[] = [
   {},
   { transpose: true },
@@ -556,8 +721,20 @@ const easyModeVariants = easyModeTransforms.flatMap((transform) =>
   )
 )
 
+const spanishEasyModeVariants = easyModeTransforms.flatMap((transform) =>
+  spanishEasyModeTemplates.flatMap((template) =>
+    template.fills.map((fill) => ({ template, fill, transform }))
+  )
+)
+
 const miniModeVariants = miniModeTransforms.flatMap((transform) =>
   miniModeTemplates.flatMap((template) =>
+    template.fills.map((fill) => ({ template, fill, transform }))
+  )
+)
+
+const spanishMiniModeVariants = miniModeTransforms.flatMap((transform) =>
+  spanishMiniModeTemplates.flatMap((template) =>
     template.fills.map((fill) => ({ template, fill, transform }))
   )
 )
@@ -768,6 +945,22 @@ function getGeneratedEasyLayoutForDate(date: string) {
   return transformedLayout
 }
 
+function getGeneratedSpanishEasyLayoutForDate(date: string) {
+  const start = Date.parse(`${FUTURE_EASY_REBUILD_START}T00:00:00Z`)
+  const current = Date.parse(`${date}T00:00:00Z`)
+  const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
+  const variant = spanishEasyModeVariants[dayOffset % spanishEasyModeVariants.length]
+  const transformedLayout = buildEasyLayout(variant.template, variant.fill, variant.transform)
+
+  for (const cell of transformedLayout) {
+    if (cell.row < 0 || cell.row >= EASY_BOARD_SIZE || cell.col < 0 || cell.col >= EASY_BOARD_SIZE) {
+      throw new Error(`Generated Spanish easy puzzle for ${date} produced out-of-bounds cell.`)
+    }
+  }
+
+  return transformedLayout
+}
+
 function getMiniModeLayoutForDate(date: string) {
   const start = Date.parse(`${MINI_MODE_REBUILD_START}T00:00:00Z`)
   const current = Date.parse(`${date}T00:00:00Z`)
@@ -778,6 +971,22 @@ function getMiniModeLayoutForDate(date: string) {
   for (const cell of transformedLayout) {
     if (cell.row < 0 || cell.row >= MINI_BOARD_SIZE || cell.col < 0 || cell.col >= MINI_BOARD_SIZE) {
       throw new Error(`Generated mini puzzle for ${date} produced out-of-bounds cell.`)
+    }
+  }
+
+  return transformedLayout
+}
+
+function getSpanishMiniModeLayoutForDate(date: string) {
+  const start = Date.parse(`${MINI_MODE_REBUILD_START}T00:00:00Z`)
+  const current = Date.parse(`${date}T00:00:00Z`)
+  const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
+  const variant = spanishMiniModeVariants[dayOffset % spanishMiniModeVariants.length]
+  const transformedLayout = buildMiniLayout(variant.template, variant.fill, variant.transform)
+
+  for (const cell of transformedLayout) {
+    if (cell.row < 0 || cell.row >= MINI_BOARD_SIZE || cell.col < 0 || cell.col >= MINI_BOARD_SIZE) {
+      throw new Error(`Generated Spanish mini puzzle for ${date} produced out-of-bounds cell.`)
     }
   }
 
@@ -836,6 +1045,32 @@ function validateEasyBlueprints() {
   }
 }
 
+function validateSpanishEasyBlueprints() {
+  for (const [templateIndex, template] of spanishEasyModeTemplates.entries()) {
+    for (const [fillIndex, fill] of template.fills.entries()) {
+      for (const [transformIndex, transform] of easyModeTransforms.entries()) {
+        validatePuzzleLayout(
+          {
+            id: `es-easy-template-${templateIndex + 1}-fill-${fillIndex + 1}-transform-${transformIndex + 1}`,
+            date: "0000-00-00",
+            boardSize: EASY_BOARD_SIZE,
+            rack: [],
+            filledCells: buildEasyLayout(template, fill, transform),
+            bonusCells: defaultBonusCells,
+            optimalScore: 0,
+            optimalWords: [],
+          },
+          {
+            minWords: 2,
+            maxWords: 5,
+          },
+          SPANISH_VALID_WORDS
+        )
+      }
+    }
+  }
+}
+
 function validateMiniBlueprints() {
   for (const [templateIndex, template] of miniModeTemplates.entries()) {
     for (const [fillIndex, fill] of template.fills.entries()) {
@@ -857,6 +1092,34 @@ function validateMiniBlueprints() {
             minLength: 3,
             maxLength: 5,
           }
+        )
+      }
+    }
+  }
+}
+
+function validateSpanishMiniBlueprints() {
+  for (const [templateIndex, template] of spanishMiniModeTemplates.entries()) {
+    for (const [fillIndex, fill] of template.fills.entries()) {
+      for (const [transformIndex, transform] of miniModeTransforms.entries()) {
+        validatePuzzleLayout(
+          {
+            id: `es-mini-template-${templateIndex + 1}-fill-${fillIndex + 1}-transform-${transformIndex + 1}`,
+            date: "0000-00-00",
+            boardSize: MINI_BOARD_SIZE,
+            rack: [],
+            filledCells: buildMiniLayout(template, fill, transform),
+            bonusCells: miniModeBonusCells,
+            optimalScore: 0,
+            optimalWords: [],
+          },
+          {
+            minWords: 2,
+            maxWords: 3,
+            minLength: 3,
+            maxLength: 5,
+          },
+          SPANISH_VALID_WORDS
         )
       }
     }
@@ -1576,10 +1839,21 @@ for (const puzzle of DAILY_PUZZLES) {
 validateEasyBlueprints()
 validateHardBlueprints()
 validateMiniBlueprints()
+validateSpanishEasyBlueprints()
+validateSpanishMiniBlueprints()
 
-export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
+export function getPuzzleByDate(
+  date: string,
+  mode: PuzzleMode = "easy",
+  locale: LocaleCode = "en"
+) {
   const easyPuzzle = DAILY_PUZZLES.find((puzzle) => puzzle.date === date) || DAILY_PUZZLES[0]
-  const generatedRack = generateRackForSeed(mode === "mini" ? 5 : easyPuzzle.rack.length, `${date}-${mode}-rack`)
+  const wordSet = getWordSetForLocale(locale)
+  const generatedRack = generateRackForSeed(
+    mode === "mini" ? 5 : easyPuzzle.rack.length,
+    `${date}-${mode}-${locale}-rack`,
+    locale
+  )
 
   if (mode === "mini") {
     const miniPuzzle: DailyPuzzle = {
@@ -1587,7 +1861,7 @@ export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
       id: `${easyPuzzle.id}-mini`,
       boardSize: MINI_BOARD_SIZE,
       rack: generatedRack,
-      filledCells: getMiniModeLayoutForDate(date),
+      filledCells: locale === "es" ? getSpanishMiniModeLayoutForDate(date) : getMiniModeLayoutForDate(date),
       bonusCells: miniModeBonusCells,
     }
 
@@ -1596,7 +1870,7 @@ export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
       maxWords: 3,
       minLength: 3,
       maxLength: 5,
-    })
+    }, wordSet)
     return miniPuzzle
   }
 
@@ -1604,11 +1878,15 @@ export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
     const puzzle = {
       ...easyPuzzle,
       rack: generatedRack,
+      filledCells:
+        locale === "es"
+          ? getGeneratedSpanishEasyLayoutForDate(date)
+          : easyPuzzle.filledCells,
     }
     validatePuzzleLayout(puzzle, {
       minWords: 2,
       maxWords: 5,
-    })
+    }, wordSet)
     return puzzle
   }
 
@@ -1621,11 +1899,11 @@ export function getPuzzleByDate(date: string, mode: PuzzleMode = "easy") {
     bonusCells: hardModeBonusCells,
   }
 
-  validatePuzzleLayout(hardPuzzle, hardPuzzleValidationOptions)
+  validatePuzzleLayout(hardPuzzle, hardPuzzleValidationOptions, wordSet)
   return hardPuzzle
 }
 
-export function getTodayPuzzle(mode: PuzzleMode = "easy") {
+export function getTodayPuzzle(mode: PuzzleMode = "easy", locale: LocaleCode = "en") {
   const today = new Date().toISOString().slice(0, 10)
-  return getPuzzleByDate(today, mode)
+  return getPuzzleByDate(today, mode, locale)
 }
