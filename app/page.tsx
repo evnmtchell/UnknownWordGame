@@ -499,6 +499,7 @@ export default function Home() {
   const [homeBrandRack, setHomeBrandRack] = useState<string[]>(HOME_BRAND_TILES)
   const [homeBrandDraggedIndex, setHomeBrandDraggedIndex] = useState<number | null>(null)
   const [homeBrandDropIndex, setHomeBrandDropIndex] = useState<number | null>(null)
+  const homeBrandDropIndexRef = useRef<number | null>(null)
   const homeBrandTouchStartRef = useRef<{ x: number; y: number } | null>(null)
   const [selectedTile, setSelectedTile] = useState<TileSelection>(null)
   const [draggedTile, setDraggedTile] = useState<TileSelection>(null)
@@ -566,6 +567,11 @@ export default function Home() {
   function updateRackDropIndex(index: number | null) {
     rackDropIndexRef.current = index
     setRackDropIndex(index)
+  }
+
+  function updateHomeBrandDropIndex(index: number | null) {
+    homeBrandDropIndexRef.current = index
+    setHomeBrandDropIndex(index)
   }
 
   function markPlayerActivity() {
@@ -1308,13 +1314,30 @@ export default function Home() {
 
     if (finalIndex === fromIndex) {
       setHomeBrandDraggedIndex(null)
-      setHomeBrandDropIndex(null)
+      updateHomeBrandDropIndex(null)
       return
     }
 
     setHomeBrandRack((prev) => moveItemToIndex(prev, fromIndex, finalIndex))
     setHomeBrandDraggedIndex(null)
-    setHomeBrandDropIndex(null)
+    updateHomeBrandDropIndex(null)
+  }
+
+  function getHomeBrandTileShift(index: number) {
+    if (homeBrandDraggedIndex === null || homeBrandDropIndex === null) return 0
+    if (index === homeBrandDraggedIndex) return 0
+
+    const slotShift = isCompactMobile ? (isSmallPhone ? 40 : isLargePhone ? 48 : 44) : 122
+
+    if (homeBrandDropIndex > homeBrandDraggedIndex) {
+      return index > homeBrandDraggedIndex && index < homeBrandDropIndex ? -slotShift : 0
+    }
+
+    if (homeBrandDropIndex < homeBrandDraggedIndex) {
+      return index >= homeBrandDropIndex && index < homeBrandDraggedIndex ? slotShift : 0
+    }
+
+    return 0
   }
 
   function handleHomeBrandTouchStart(e: React.TouchEvent, index: number) {
@@ -1322,7 +1345,7 @@ export default function Home() {
     if (!touch) return
     homeBrandTouchStartRef.current = { x: touch.clientX, y: touch.clientY }
     setHomeBrandDraggedIndex(index)
-    setHomeBrandDropIndex(index)
+    updateHomeBrandDropIndex(index)
   }
 
   function handleRackGapDrop(targetIndex: number) {
@@ -2371,14 +2394,14 @@ export default function Home() {
       const el = document.elementFromPoint(touch.clientX, touch.clientY)
       const tileEl = el?.closest("[data-home-brand-index]") as HTMLElement | null
       if (!tileEl?.dataset.homeBrandIndex) return
-      setHomeBrandDropIndex(parseInt(tileEl.dataset.homeBrandIndex, 10))
+      updateHomeBrandDropIndex(parseInt(tileEl.dataset.homeBrandIndex, 10))
     }
 
     function onTouchEnd(e: TouchEvent) {
       const touch = e.changedTouches[0]
       const start = homeBrandTouchStartRef.current
       const moved = start ? Math.hypot(touch.clientX - start.x, touch.clientY - start.y) : 0
-      const dropIndex = homeBrandDropIndex
+      const dropIndex = homeBrandDropIndexRef.current
       const dragIndex = homeBrandDraggedIndex
 
       homeBrandTouchStartRef.current = null
@@ -2389,7 +2412,7 @@ export default function Home() {
       }
 
       setHomeBrandDraggedIndex(null)
-      setHomeBrandDropIndex(null)
+      updateHomeBrandDropIndex(null)
     }
 
     document.addEventListener("touchmove", onTouchMove, { passive: true })
@@ -2401,7 +2424,7 @@ export default function Home() {
       document.removeEventListener("touchend", onTouchEnd)
       document.removeEventListener("touchcancel", onTouchEnd)
     }
-  }, [homeBrandDraggedIndex, homeBrandDropIndex, touchDragActivationDistance])
+  }, [homeBrandDraggedIndex, touchDragActivationDistance])
 
   const gameOver = attemptsLeft === 0
   const canShare = attemptHistory.length > 0
@@ -3336,7 +3359,7 @@ export default function Home() {
                     data-home-brand-index={index}
                     onDragOver={(e) => {
                       e.preventDefault()
-                      setHomeBrandDropIndex(index)
+                      updateHomeBrandDropIndex(index)
                     }}
                     onDrop={(e) => {
                       e.preventDefault()
@@ -3351,10 +3374,18 @@ export default function Home() {
                   >
                     <div
                       draggable
-                      onDragStart={() => setHomeBrandDraggedIndex(index)}
+                      onDragStart={() => {
+                        setHomeBrandDraggedIndex(index)
+                        updateHomeBrandDropIndex(index)
+                      }}
                       onDragEnd={() => {
+                        const activeDropIndex = homeBrandDropIndexRef.current
+                        if (homeBrandDraggedIndex !== null && activeDropIndex !== null) {
+                          reorderHomeBrandTile(homeBrandDraggedIndex, activeDropIndex)
+                          return
+                        }
                         setHomeBrandDraggedIndex(null)
-                        setHomeBrandDropIndex(null)
+                        updateHomeBrandDropIndex(null)
                       }}
                       onTouchStart={(e) => handleHomeBrandTouchStart(e, index)}
                       style={{
@@ -3382,8 +3413,10 @@ export default function Home() {
                         transform:
                           homeBrandDraggedIndex === index
                             ? `scale(0.96) rotate(${[-4, 3, -2, 2, -3, 2, -2][index]}deg)`
-                            : `rotate(${[-4, 3, -2, 2, -3, 2, -2][index]}deg)`,
-                        opacity: homeBrandDraggedIndex === index ? 0.75 : 1,
+                            : `translateX(${getHomeBrandTileShift(index)}px) rotate(${[-4, 3, -2, 2, -3, 2, -2][index]}deg)`,
+                        opacity: homeBrandDraggedIndex === index ? 0.82 : 1,
+                        transition: "transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease",
+                        willChange: homeBrandDraggedIndex !== null ? "transform" : undefined,
                         flexShrink: 0,
                         userSelect: "none",
                       }}
@@ -3402,17 +3435,6 @@ export default function Home() {
                         {LETTER_SCORES[letter] ?? 0}
                       </span>
                     </div>
-                    {homeBrandDropIndex === index && homeBrandDraggedIndex !== null && (
-                      <div
-                        style={{
-                          width: isCompactMobile ? "4px" : "6px",
-                          height: isCompactMobile ? "30px" : "40px",
-                          borderRadius: "999px",
-                          backgroundColor: "#7aad2a",
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
                   </div>
                 ))}
               </div>
