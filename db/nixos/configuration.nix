@@ -193,7 +193,7 @@
       Type = "oneshot";
       WorkingDirectory = "/etc/nixos/plantos-db/db/scripts";
       EnvironmentFile = "/var/lib/secrets/plantos-db.env";
-      ExecStart = "${pkgs.nodejs_20}/bin/node dist/generate-daily.js";
+      ExecStart = "${pkgs.nodejs_20}/bin/npx tsx generate-daily.ts";
       TimeoutStartSec = "300";
     };
   };

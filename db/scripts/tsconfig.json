@@ -1,16 +1,17 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ES2022",
+    "moduleResolution": "node",
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "../..",
     "esModuleInterop": true,
-    "strict": true,
+    "strict": false,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "types": ["node"]
   },
   "include": [
     "./**/*.ts",
@@ -18,8 +19,9 @@
     "../../app/solver.ts",
     "../../app/words.ts",
     "../../app/words-es.ts",
+    "../../app/scoring.ts",
     "../../app/scoring-es.ts",
     "../../app/locales/**/*.ts"
   ],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules", "seed-puzzles.ts"]
 }

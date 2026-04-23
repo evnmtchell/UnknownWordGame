@@ -10,12 +10,15 @@
 import { readFileSync } from "fs"
 import { fileURLToPath } from "url"
 import { dirname, join } from "path"
-import type { DailyPuzzle, BonusType, PuzzleCell } from "../../app/puzzles.js"
-import type { LocaleCode } from "../../app/locales/index.js"
-import { BLANK_TILE, LETTER_SCORES } from "../../app/scoring.js"
-import { SPANISH_LETTER_SCORES } from "../../app/scoring-es.js"
-import { VALID_WORDS } from "../../app/words.js"
-import { SPANISH_VALID_WORDS } from "../../app/words-es.js"
+import { createRequire } from "module"
+import type { DailyPuzzle, BonusType, PuzzleCell } from "../../app/puzzles"
+import type { LocaleCode } from "../../app/locales"
+
+// Use createRequire to load app modules (they're under a CJS package scope)
+const require = createRequire(import.meta.url)
+const { BLANK_TILE } = require("../../app/scoring")
+const { VALID_WORDS } = require("../../app/words")
+const { SPANISH_VALID_WORDS } = require("../../app/words-es")
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -30,13 +33,13 @@ let esFrequency: Record<string, number> | null = null
 function getFrequencyData(locale: LocaleCode): Record<string, number> {
   if (locale === "es") {
     if (!esFrequency) {
-      const path = join(__dirname, "..", "data", "word-frequency-es.json")
+      const path = join(__dirname, "data", "word-frequency-es.json")
       esFrequency = JSON.parse(readFileSync(path, "utf-8"))
     }
     return esFrequency!
   }
   if (!enFrequency) {
-    const path = join(__dirname, "..", "data", "word-frequency-en.json")
+    const path = join(__dirname, "data", "word-frequency-en.json")
     enFrequency = JSON.parse(readFileSync(path, "utf-8"))
   }
   return enFrequency!

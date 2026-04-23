@@ -122,8 +122,7 @@ jobs:
             echo "=== Step 6b: Building puzzle generator ==="
             cd /etc/nixos/plantos-db/db/scripts
             npm install
-            npx tsc
-            node dist/build-frequency-data.js
+            npx tsx build-frequency-data.ts
             echo "Puzzle generator built"
 
             echo "=== Step 7: Running Migrations ==="

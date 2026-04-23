@@ -16,18 +16,22 @@
  */
 
 import { randomInt } from "crypto"
-import { getPuzzleByDate } from "../../app/puzzles.js"
-import { solvePuzzle } from "../../app/solver.js"
-import type { DailyPuzzle } from "../../app/puzzles.js"
-import type { LocaleCode } from "../../app/locales/index.js"
-import { BLANK_TILE } from "../../app/scoring.js"
+import { createRequire } from "module"
+import type { DailyPuzzle } from "../../app/puzzles"
+import type { LocaleCode } from "../../app/locales"
+
+// Use createRequire to load app modules (they're under a CJS package scope)
+const require = createRequire(import.meta.url)
+const { getPuzzleByDate } = require("../../app/puzzles")
+const { solvePuzzle } = require("../../app/solver")
+const { BLANK_TILE } = require("../../app/scoring")
 import {
   scoreDifficulty,
   pickBestCandidate,
   getTargetDifficulty,
   type PuzzleMode,
   type DifficultyBreakdown,
-} from "./difficulty.js"
+} from "./difficulty"
 
 // ---------------------------------------------------------------------------
 // Config

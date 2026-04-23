@@ -22,7 +22,7 @@ import { execSync } from "child_process"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const DATA_DIR = join(__dirname, "..", "data")
+const DATA_DIR = join(__dirname, "data")
 
 // ---------------------------------------------------------------------------
 // English frequency data
@@ -171,13 +171,21 @@ function scoreEnglishWord(word: string): number {
 }
 
 async function buildEnglishFrequency() {
-  // Load the game's word list
+  // Load the game's word list — read the JSON directly since
+  // the npm package's main is index.json
   let words: string[]
   try {
-    const mod = await import("an-array-of-english-words")
-    words = (mod.default || mod) as string[]
+    // Walk up to find the package in repo root or local node_modules
+    const locations = [
+      join(__dirname, "node_modules", "an-array-of-english-words", "index.json"),
+      join(__dirname, "..", "node_modules", "an-array-of-english-words", "index.json"),
+      join(__dirname, "..", "..", "node_modules", "an-array-of-english-words", "index.json"),
+    ]
+    const found = locations.find((p) => existsSync(p))
+    if (!found) throw new Error("not found")
+    words = JSON.parse(readFileSync(found, "utf-8"))
   } catch {
-    console.error("Could not import an-array-of-english-words. Run: npm install")
+    console.error("Could not find an-array-of-english-words. Run: npm install")
     process.exit(1)
   }
 
