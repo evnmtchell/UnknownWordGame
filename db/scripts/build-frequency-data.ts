@@ -15,7 +15,7 @@
  *   db/scripts/data/word-frequency-es.json
  */
 
-import { writeFileSync, readFileSync, existsSync } from "fs"
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs"
 import { fileURLToPath } from "url"
 import { dirname, join } from "path"
 import { execSync } from "child_process"
@@ -23,6 +23,7 @@ import { execSync } from "child_process"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const DATA_DIR = join(__dirname, "data")
+mkdirSync(DATA_DIR, { recursive: true })
 
 // ---------------------------------------------------------------------------
 // English frequency data
