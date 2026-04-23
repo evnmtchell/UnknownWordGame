@@ -119,6 +119,13 @@ jobs:
             npm install --production
             echo "API dependencies installed"
 
+            echo "=== Step 6b: Building puzzle generator ==="
+            cd /etc/nixos/plantos-db/db/scripts
+            npm install
+            npx tsc
+            node dist/build-frequency-data.js
+            echo "Puzzle generator built"
+
             echo "=== Step 7: Running Migrations ==="
             systemctl restart lexicon-migrations
             sleep 3
@@ -128,6 +135,10 @@ jobs:
             systemctl restart lexicon-api
             sleep 2
             systemctl is-active lexicon-api && echo "API running" || echo "API failed to start"
+
+            echo "=== Step 9: Verifying puzzle generator timer ==="
+            systemctl is-enabled lexicon-puzzle-generator.timer && echo "Generator timer enabled" || echo "Generator timer not yet enabled"
+            systemctl list-timers lexicon-puzzle-generator.timer --no-pager || true
 
             echo "DEPLOYMENT SUCCESSFUL"
           REMOTESCRIPT

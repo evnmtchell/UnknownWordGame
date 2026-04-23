@@ -1,0 +1,21 @@
+{
+  "name": "lexicon-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "generate": "node dist/generate-daily.js",
+    "generate:dry": "node dist/generate-daily.js --dry-run --verbose",
+    "build-frequency": "node dist/build-frequency-data.js",
+    "seed": "node --loader ts-node/esm seed-puzzles.ts"
+  },
+  "dependencies": {
+    "an-array-of-english-words": "^2.0.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0"
+  }
+}

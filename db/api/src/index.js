@@ -617,10 +617,12 @@ app.get("/api/shares/stats", async (req, res) => {
 })
 
 // GET /api/puzzles — list available puzzle dates
-app.get("/api/puzzles", async (_req, res) => {
+app.get("/api/puzzles", async (req, res) => {
+  const locale = req.query.locale || "en"
   try {
     const { rows } = await pool.query(
-      "SELECT date, mode, board_size, optimal_score FROM puzzles WHERE date <= CURRENT_DATE ORDER BY date DESC"
+      "SELECT date, mode, locale, board_size, optimal_score, difficulty_score FROM puzzles WHERE date <= CURRENT_DATE AND locale = $1 ORDER BY date DESC",
+      [locale]
     )
     res.json(rows)
   } catch (err) {
@@ -632,11 +634,12 @@ app.get("/api/puzzles", async (_req, res) => {
 app.get("/api/puzzles/:date", async (req, res) => {
   const { date } = req.params
   const mode = req.query.mode || "easy"
+  const locale = req.query.locale || "en"
 
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM puzzles WHERE date = $1 AND mode = $2",
-      [date, mode]
+      "SELECT * FROM puzzles WHERE date = $1 AND mode = $2 AND locale = $3",
+      [date, mode, locale]
     )
 
     if (rows.length === 0) {
@@ -664,26 +667,33 @@ app.post("/api/puzzles", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO puzzles (date, mode, board_size, rack, filled_cells, bonus_cells, optimal_score, optimal_words)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (date, mode)
+      `INSERT INTO puzzles (date, mode, locale, board_size, rack, filled_cells, bonus_cells, optimal_score, optimal_words, difficulty_score, difficulty_breakdown, generator_version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ON CONFLICT (date, mode, locale)
        DO UPDATE SET
-         board_size = $3,
-         rack = $4,
-         filled_cells = $5,
-         bonus_cells = $6,
-         optimal_score = $7,
-         optimal_words = $8
+         board_size = $4,
+         rack = $5,
+         filled_cells = $6,
+         bonus_cells = $7,
+         optimal_score = $8,
+         optimal_words = $9,
+         difficulty_score = $10,
+         difficulty_breakdown = $11,
+         generator_version = $12
        RETURNING *`,
       [
         body.date,
         body.mode,
+        body.locale || "en",
         body.board_size,
         JSON.stringify(body.rack),
         JSON.stringify(body.filled_cells),
         JSON.stringify(body.bonus_cells),
         body.optimal_score,
         JSON.stringify(body.optimal_words),
+        body.difficulty_score || null,
+        body.difficulty_breakdown ? JSON.stringify(body.difficulty_breakdown) : null,
+        body.generator_version || 1,
       ]
     )
 
@@ -695,7 +705,7 @@ app.post("/api/puzzles", async (req, res) => {
 
 // GET /api/sessions — load game session
 app.get("/api/sessions", async (req, res) => {
-  const { date, mode } = req.query
+  const { date, mode, locale } = req.query
   const userId = req.user.user_id
 
   if (!date) {
@@ -706,8 +716,8 @@ app.get("/api/sessions", async (req, res) => {
     const { rows } = await pool.query(
       `SELECT gs.* FROM game_sessions gs
        JOIN puzzles p ON gs.puzzle_id = p.id
-       WHERE gs.user_id = $1 AND p.date = $2 AND p.mode = $3`,
-      [userId, date, mode || "easy"]
+       WHERE gs.user_id = $1 AND p.date = $2 AND p.mode = $3 AND p.locale = $4`,
+      [userId, date, mode || "easy", locale || "en"]
     )
 
     res.json(rows[0] || null)
@@ -727,8 +737,8 @@ app.post("/api/sessions", async (req, res) => {
 
   try {
     const puzzleResult = await pool.query(
-      "SELECT id FROM puzzles WHERE date = $1 AND mode = $2",
-      [body.date, body.mode || "easy"]
+      "SELECT id FROM puzzles WHERE date = $1 AND mode = $2 AND locale = $3",
+      [body.date, body.mode || "easy", body.locale || "en"]
     )
 
     if (puzzleResult.rows.length === 0) {

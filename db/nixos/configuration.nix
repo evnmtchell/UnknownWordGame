@@ -176,6 +176,39 @@
   };
 
   # ==========================================
+  # LEXICON PUZZLE GENERATOR (Daily Cron)
+  # ==========================================
+
+  systemd.services.lexicon-puzzle-generator = {
+    description = "Lexicon Daily Puzzle Generator";
+    after = [ "postgresql.service" "network-online.target" "lexicon-api.service" ];
+    requires = [ "network-online.target" ];
+    wants = [ "lexicon-api.service" ];
+    path = [ pkgs.nodejs_20 ];
+    environment = {
+      NODE_ENV = "production";
+      API_BASE = "http://localhost:3100";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      WorkingDirectory = "/etc/nixos/plantos-db/db/scripts";
+      EnvironmentFile = "/var/lib/secrets/plantos-db.env";
+      ExecStart = "${pkgs.nodejs_20}/bin/node dist/generate-daily.js";
+      TimeoutStartSec = "300";
+    };
+  };
+
+  systemd.timers.lexicon-puzzle-generator = {
+    description = "Daily puzzle generation at 03:00";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "03:00";
+      Persistent = true;
+      RandomizedDelaySec = "5min";
+    };
+  };
+
+  # ==========================================
   # 4. CLOUDFLARE TUNNEL
   # ==========================================
   # Configure ingress in the Cloudflare dashboard:

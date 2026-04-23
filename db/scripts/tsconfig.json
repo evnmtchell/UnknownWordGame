@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": ".",
+    "esModuleInterop": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "./**/*.ts",
+    "../../app/puzzles.ts",
+    "../../app/solver.ts",
+    "../../app/words.ts",
+    "../../app/words-es.ts",
+    "../../app/scoring-es.ts",
+    "../../app/locales/**/*.ts"
+  ],
+  "exclude": ["dist", "node_modules"]
+}
