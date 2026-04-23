@@ -120,6 +120,8 @@ jobs:
             echo "API dependencies installed"
 
             echo "=== Step 6b: Building puzzle generator ==="
+            cd /etc/nixos/plantos-db
+            npm install --omit=dev an-array-of-english-words 2>/dev/null || npm install an-array-of-english-words
             cd /etc/nixos/plantos-db/db/scripts
             npm install
             npx tsx build-frequency-data.ts
