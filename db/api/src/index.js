@@ -65,6 +65,12 @@ function signToken(user) {
 }
 
 function authMiddleware(req, res, next) {
+  // Allow admin-key authenticated requests through (used by puzzle generator)
+  if (req.headers["x-admin-key"] === JWT_SECRET) {
+    req.user = { user_id: "admin", username: "admin", anon: false }
+    return next()
+  }
+
   const header = req.headers.authorization
   if (!header || !header.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Authorization required" })
