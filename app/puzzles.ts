@@ -257,22 +257,35 @@ function getVowelsForLocale(locale: LocaleCode) {
   return locale === "es" ? SPANISH_RACK_VOWELS : ["A", "E", "I", "O", "U"]
 }
 
+function countRackLetter(rack: string[], target: string) {
+  return rack.filter((letter) => letter === target).length
+}
+
 function generateRackForSeed(length: number, seedText: string, locale: LocaleCode = "en") {
   const random = createSeededRandom(seedText)
   const bag = [...getRackBagForLocale(locale)]
   const rack: string[] = []
 
   for (let index = 0; index < length && bag.length > 0; index++) {
-    const bagIndex = Math.floor(random() * bag.length)
+    const eligibleIndexes = bag
+      .map((letter, bagIndex) =>
+        countRackLetter(rack, letter) < 2 ? bagIndex : null
+      )
+      .filter((bagIndex): bagIndex is number => bagIndex !== null)
+
+    const sourceIndexes = eligibleIndexes.length > 0
+      ? eligibleIndexes
+      : bag.map((_, bagIndex) => bagIndex)
+    const bagIndex = sourceIndexes[Math.floor(random() * sourceIndexes.length)]
     rack.push(bag.splice(bagIndex, 1)[0])
   }
 
   const vowels = getVowelsForLocale(locale)
   const vowelCount = rack.filter((letter) => vowels.includes(letter)).length
   if (vowelCount < 2 && rack.length > 0) {
-    const vowelBag = vowels
+    const vowelBag = vowels.filter((letter) => countRackLetter(rack, letter) < 2)
     const replaceIndex = rack.findIndex((letter) => ![...vowels, "?"].includes(letter))
-    if (replaceIndex >= 0) {
+    if (replaceIndex >= 0 && vowelBag.length > 0) {
       rack[replaceIndex] = vowelBag[Math.floor(random() * vowelBag.length)]
     }
   }
