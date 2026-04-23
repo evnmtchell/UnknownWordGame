@@ -297,8 +297,8 @@ type EasySlot = {
 const HARD_BOARD_SIZE = 11
 const MINI_BOARD_SIZE = 5
 const EASY_BOARD_SIZE = 7
-const FUTURE_EASY_REBUILD_START = "2026-04-18"
-const MINI_MODE_REBUILD_START = "2026-04-21"
+const EASY_MODE_SCHEDULE_START = "2026-04-03"
+const MINI_MODE_SCHEDULE_START = "2026-04-03"
 
 type HardTransform = {
   transpose?: boolean
@@ -739,6 +739,29 @@ const spanishMiniModeVariants = miniModeTransforms.flatMap((transform) =>
   )
 )
 
+function createShuffledSchedule<T>(variants: T[], seedText: string) {
+  const random = createSeededRandom(seedText)
+  const scheduled = [...variants]
+
+  for (let index = scheduled.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(random() * (index + 1))
+    ;[scheduled[index], scheduled[swapIndex]] = [scheduled[swapIndex], scheduled[index]]
+  }
+
+  return scheduled
+}
+
+const easyModeSchedule = createShuffledSchedule(easyModeVariants, "classic-shape-schedule")
+const spanishEasyModeSchedule = createShuffledSchedule(
+  spanishEasyModeVariants,
+  "classic-shape-schedule-es"
+)
+const miniModeSchedule = createShuffledSchedule(miniModeVariants, "mini-shape-schedule")
+const spanishMiniModeSchedule = createShuffledSchedule(
+  spanishMiniModeVariants,
+  "mini-shape-schedule-es"
+)
+
 function transposeHardSlot(slot: HardSlot): HardSlot {
   return {
     ...slot,
@@ -930,10 +953,10 @@ function getHardModeLayoutForDate(date: string) {
 }
 
 function getGeneratedEasyLayoutForDate(date: string) {
-  const start = Date.parse(`${FUTURE_EASY_REBUILD_START}T00:00:00Z`)
+  const start = Date.parse(`${EASY_MODE_SCHEDULE_START}T00:00:00Z`)
   const current = Date.parse(`${date}T00:00:00Z`)
   const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
-  const variant = easyModeVariants[dayOffset % easyModeVariants.length]
+  const variant = easyModeSchedule[dayOffset % easyModeSchedule.length]
   const transformedLayout = buildEasyLayout(variant.template, variant.fill, variant.transform)
 
   for (const cell of transformedLayout) {
@@ -946,10 +969,10 @@ function getGeneratedEasyLayoutForDate(date: string) {
 }
 
 function getGeneratedSpanishEasyLayoutForDate(date: string) {
-  const start = Date.parse(`${FUTURE_EASY_REBUILD_START}T00:00:00Z`)
+  const start = Date.parse(`${EASY_MODE_SCHEDULE_START}T00:00:00Z`)
   const current = Date.parse(`${date}T00:00:00Z`)
   const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
-  const variant = spanishEasyModeVariants[dayOffset % spanishEasyModeVariants.length]
+  const variant = spanishEasyModeSchedule[dayOffset % spanishEasyModeSchedule.length]
   const transformedLayout = buildEasyLayout(variant.template, variant.fill, variant.transform)
 
   for (const cell of transformedLayout) {
@@ -962,10 +985,10 @@ function getGeneratedSpanishEasyLayoutForDate(date: string) {
 }
 
 function getMiniModeLayoutForDate(date: string) {
-  const start = Date.parse(`${MINI_MODE_REBUILD_START}T00:00:00Z`)
+  const start = Date.parse(`${MINI_MODE_SCHEDULE_START}T00:00:00Z`)
   const current = Date.parse(`${date}T00:00:00Z`)
   const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
-  const variant = miniModeVariants[dayOffset % miniModeVariants.length]
+  const variant = miniModeSchedule[dayOffset % miniModeSchedule.length]
   const transformedLayout = buildMiniLayout(variant.template, variant.fill, variant.transform)
 
   for (const cell of transformedLayout) {
@@ -978,10 +1001,10 @@ function getMiniModeLayoutForDate(date: string) {
 }
 
 function getSpanishMiniModeLayoutForDate(date: string) {
-  const start = Date.parse(`${MINI_MODE_REBUILD_START}T00:00:00Z`)
+  const start = Date.parse(`${MINI_MODE_SCHEDULE_START}T00:00:00Z`)
   const current = Date.parse(`${date}T00:00:00Z`)
   const dayOffset = Number.isFinite(current) ? Math.max(0, Math.floor((current - start) / 86400000)) : 0
-  const variant = spanishMiniModeVariants[dayOffset % spanishMiniModeVariants.length]
+  const variant = spanishMiniModeSchedule[dayOffset % spanishMiniModeSchedule.length]
   const transformedLayout = buildMiniLayout(variant.template, variant.fill, variant.transform)
 
   for (const cell of transformedLayout) {
@@ -1804,36 +1827,15 @@ const datedBaseDailyPuzzles: DailyPuzzle[] = [
   ...generateFutureBasePuzzles("2026-05-08", "2026-05-31", 37),
 ]
 
-export const DAILY_PUZZLES: DailyPuzzle[] = datedBaseDailyPuzzles.map((puzzle, index) => {
-  if (puzzle.date >= FUTURE_EASY_REBUILD_START) {
-    return {
-      ...puzzle,
-      filledCells: getGeneratedEasyLayoutForDate(puzzle.date),
-    }
-  }
-
-  if (puzzle.date >= "2026-04-08" && puzzle.date <= "2026-04-20") {
-    return puzzle
-  }
-
-  const replacementIndex =
-    puzzle.date < "2026-04-08"
-      ? index
-      : index - baseDailyPuzzles.findIndex((item) => item.date === "2026-04-09")
-
+export const DAILY_PUZZLES: DailyPuzzle[] = datedBaseDailyPuzzles.map((puzzle) => {
   return {
     ...puzzle,
-    filledCells: harderFutureThreeWordLayouts[replacementIndex % harderFutureThreeWordLayouts.length],
+    filledCells: getGeneratedEasyLayoutForDate(puzzle.date),
   }
 })
 
 for (const puzzle of DAILY_PUZZLES) {
-  if (puzzle.date >= FUTURE_EASY_REBUILD_START) {
-    validatePuzzleLayout(puzzle, { minWords: 2, maxWords: 5 })
-    continue
-  }
-
-  validatePuzzleLayout(puzzle)
+  validatePuzzleLayout(puzzle, { minWords: 2, maxWords: 5 })
 }
 
 validateEasyBlueprints()
@@ -1881,7 +1883,7 @@ export function getPuzzleByDate(
       filledCells:
         locale === "es"
           ? getGeneratedSpanishEasyLayoutForDate(date)
-          : easyPuzzle.filledCells,
+          : getGeneratedEasyLayoutForDate(date),
     }
     validatePuzzleLayout(puzzle, {
       minWords: 2,

@@ -4535,7 +4535,7 @@ export default function Home() {
           <div
             style={{
               display: "flex",
-              alignItems: "center",
+              alignItems: isCompactMobile ? "flex-start" : "center",
               justifyContent: "space-between",
               gap: isCompactMobile ? "10px" : "12px",
               fontSize: isCompactMobile ? "13px" : "16px",
@@ -4543,6 +4543,7 @@ export default function Home() {
               fontWeight: isCompactMobile ? 700 : 500,
               color: "#3f3020",
               textAlign: isCompactMobile ? "left" : "left",
+              minHeight: isCompactMobile ? "34px" : undefined,
             }}
           >
             <span style={{ flex: "1 1 auto", minWidth: 0 }}>{message}</span>
@@ -5135,8 +5136,6 @@ export default function Home() {
                         draggedPlacedTile.row === row &&
                         draggedPlacedTile.col === col
                           ? "2px solid #2563eb"
-                          : draggedTile && !letter
-                          ? "2px dashed #7b6241"
                           : "1px solid #7b6241",
                       display: "flex",
                       alignItems: "center",
@@ -5520,7 +5519,7 @@ export default function Home() {
                             : `translateX(${getRackTileShift(index)}px)`,
                       }}
                     >
-                      {tile ?? ""}
+                      {tile === BLANK_TILE ? "" : tile ?? ""}
                       {tile !== null && (
                         <span
                           style={{
@@ -5898,7 +5897,7 @@ export default function Home() {
               "inset 0 1px 0 rgba(255,255,255,0.46), 0 18px 30px rgba(53, 39, 19, 0.24), 0 8px 14px rgba(53, 39, 19, 0.14)",
           }}
         >
-          {touchDrag.letter}
+          {touchDrag.isBlank ? "" : touchDrag.letter}
           <span
             style={{
               position: "absolute",
