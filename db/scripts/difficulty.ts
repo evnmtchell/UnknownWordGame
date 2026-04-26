@@ -415,6 +415,31 @@ export function scoreDifficulty(
 }
 
 // ---------------------------------------------------------------------------
+// Fast difficulty estimate (no solver, no placement counting)
+// Uses only rack score + anchor/bonus heuristics for cheap screening
+// ---------------------------------------------------------------------------
+
+export function estimateDifficultyFast(puzzle: DailyPuzzle, locale: LocaleCode = "en"): number {
+  const rackScore = scoreRackDifficulty(puzzle.rack, locale)
+  const anchors = getAnchorPoints(puzzle)
+  const bonusAccess = countBonusAccessibility(puzzle, anchors)
+  const anchorScore = Math.max(0, 1 - anchors.size / 20)
+  const bonusScore = 1 - bonusAccess
+
+  // Rough board estimate without counting placements
+  const boardEstimate = anchorScore * 0.60 + bonusScore * 0.40
+
+  // Use 0.35 as default word obscurity (mid-range assumption)
+  const wordEstimate = 0.35
+
+  return Math.max(0, Math.min(1,
+    RACK_WEIGHT * rackScore +
+    BOARD_WEIGHT * boardEstimate +
+    WORD_WEIGHT * wordEstimate
+  ))
+}
+
+// ---------------------------------------------------------------------------
 // Target difficulty by day-of-week
 // ---------------------------------------------------------------------------
 

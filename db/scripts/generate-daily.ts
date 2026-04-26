@@ -27,6 +27,7 @@ const { solvePuzzle } = require("../../app/solver")
 const { BLANK_TILE } = require("../../app/scoring")
 import {
   scoreDifficulty,
+  estimateDifficultyFast,
   pickBestCandidate,
   getTargetDifficulty,
   type PuzzleMode,
@@ -191,23 +192,58 @@ interface ScoredCandidate {
   solverResult: { bestScore: number; bestWords: string[] }
 }
 
+const FINALISTS_COUNT = 5
+
 function generateAndScoreCandidates(
   targetDate: string,
   mode: PuzzleMode,
   locale: LocaleCode,
   verbose: boolean
 ): ScoredCandidate[] {
-  const candidates: ScoredCandidate[] = []
+  // Phase 1: Generate all candidates with fast difficulty estimate (no solver)
+  const target = getTargetDifficulty(targetDate, mode)
+  const rough: { puzzle: DailyPuzzle; estimate: number; index: number }[] = []
 
   for (let i = 0; i < CANDIDATES_PER_PUZZLE; i++) {
     const puzzle = generateCandidate(targetDate, i, mode, locale)
     if (!puzzle) continue
 
     try {
-      // Solve to get optimal score/words
+      const estimate = estimateDifficultyFast(puzzle, locale)
+      rough.push({ puzzle, estimate, index: i })
+
+      if (verbose) {
+        console.log(`  Candidate ${i}: fast estimate=${estimate.toFixed(3)}`)
+      }
+    } catch (err) {
+      if (verbose) {
+        console.log(`  Candidate ${i}: FAILED - ${(err as Error).message}`)
+      }
+    }
+  }
+
+  // Phase 2: Pick top N closest to target, run full solver + scoring on those
+  rough.sort((a, b) =>
+    Math.abs(a.estimate - target.ideal) - Math.abs(b.estimate - target.ideal)
+  )
+  const finalists = rough.slice(0, FINALISTS_COUNT)
+
+  if (verbose) {
+    console.log(`  Scoring ${finalists.length} finalists with full solver...`)
+  }
+
+  const candidates: ScoredCandidate[] = []
+
+  for (const { puzzle, index } of finalists) {
+    try {
       const solverResult = solvePuzzle(puzzle, locale)
 
-      // Score difficulty
+      // Skip puzzles where solver found no valid play
+      if (solverResult.bestScore === 0) {
+        if (verbose) console.log(`  Finalist ${index}: no valid plays, skipping`)
+        continue
+      }
+
       const { score, breakdown } = scoreDifficulty(puzzle, solverResult, locale)
 
       candidates.push({
@@ -219,16 +255,15 @@ function generateAndScoreCandidates(
 
       if (verbose) {
         console.log(
-          `  Candidate ${i}: difficulty=${score.toFixed(3)} ` +
+          `  Finalist ${index}: difficulty=${score.toFixed(3)} ` +
           `(rack=${breakdown.rack_score.toFixed(2)} board=${breakdown.board_score.toFixed(2)} ` +
           `word=${breakdown.word_obscurity_score.toFixed(2)}) ` +
           `optimal=${solverResult.bestScore} placements=${breakdown.valid_placement_count}`
         )
       }
     } catch (err) {
-      // Solver or scoring failed — skip this candidate
       if (verbose) {
-        console.log(`  Candidate ${i}: FAILED - ${(err as Error).message}`)
+        console.log(`  Finalist ${index}: FAILED - ${(err as Error).message}`)
       }
     }
   }
