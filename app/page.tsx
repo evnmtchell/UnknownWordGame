@@ -8,7 +8,8 @@ import { solvePuzzle } from "./solver"
 import { BLANK_TILE, LETTER_SCORES } from "./scoring"
 import { SPANISH_LETTER_SCORES } from "./scoring-es"
 import { getLocaleConfig, getLocaleFromBrowserLanguage, type LocaleCode } from "./locales"
-import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, loadWordDefinition, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink, trackVisit } from "./api-client"
+import { saveSession, saveStats, loadSession, loadStats, loadPuzzleOptimal, loadPuzzleFromAPI, loadWordDefinition, login as apiLogin, register as apiRegister, logout as apiLogout, getAuthState, isLoggedIn, loginWithGoogle, loginWithApple, handleOAuthCallback, storeArrivedFromRef, createShareLink, trackVisit } from "./api-client"
+import type { APIPuzzle } from "./api-client"
 
 type TileSelection = {
   letter: string
@@ -364,6 +365,7 @@ export default function Home() {
   const returnPlacedTileToRackRef = useRef<((tile: DraggedPlacedTile) => void) | null>(null)
 
   const [puzzleOptimal, setPuzzleOptimal] = useState<{ score: number; words: string[] } | null>(null)
+  const [apiPuzzle, setApiPuzzle] = useState<APIPuzzle | null>(null)
   const selectedLocaleConfig = useMemo(() => getLocaleConfig(selectedLocale), [selectedLocale])
   const loadedLocaleConfig = useMemo(
     () => getLocaleConfig(loadedGameConfig.locale),
@@ -377,10 +379,40 @@ export default function Home() {
     () => (loadedGameConfig.locale === "es" ? SPANISH_LETTER_SCORES : LETTER_SCORES),
     [loadedGameConfig.locale]
   )
-  const puzzle = useMemo(
+  const localPuzzle = useMemo(
     () => getPuzzleByDate(loadedGameConfig.date, loadedGameConfig.mode, loadedGameConfig.locale),
     [loadedGameConfig]
   )
+  const puzzle = useMemo(() => {
+    if (apiPuzzle && apiPuzzle.date === loadedGameConfig.date && apiPuzzle.mode === loadedGameConfig.mode && apiPuzzle.locale === loadedGameConfig.locale) {
+      return {
+        id: `api-${apiPuzzle.date}-${apiPuzzle.mode}-${apiPuzzle.locale}`,
+        date: apiPuzzle.date.slice(0, 10),
+        boardSize: apiPuzzle.board_size,
+        rack: apiPuzzle.rack,
+        filledCells: apiPuzzle.filled_cells,
+        bonusCells: apiPuzzle.bonus_cells as { row: number; col: number; type: BonusType }[],
+        optimalScore: apiPuzzle.optimal_score,
+        optimalWords: apiPuzzle.optimal_words,
+      }
+    }
+    return localPuzzle
+  }, [apiPuzzle, localPuzzle, loadedGameConfig])
+  // Fetch puzzle from API on config change, fall back to local
+  useEffect(() => {
+    const { date, mode, locale } = loadedGameConfig
+    setApiPuzzle(null)
+    loadPuzzleFromAPI(date, mode, locale).then((fetched) => {
+      if (fetched && fetched.difficulty_score !== null) {
+        setApiPuzzle(fetched)
+        // Update rack if user hasn't placed any tiles yet
+        if (placedTiles.length === 0 && submittedWords.length === 0) {
+          setRack(fetched.rack)
+        }
+      }
+    }).catch(() => {})
+  }, [loadedGameConfig.date, loadedGameConfig.mode, loadedGameConfig.locale])
+
   type SolutionType = { bestScore: number; bestWords: string[]; bestPlacement: { row: number; col: number; letter: string; isBlank: boolean }[] }
   const fullSolutionRef = useRef<SolutionType | null>(null)
 
@@ -2110,8 +2142,9 @@ export default function Home() {
     const freshPuzzle = getPuzzleByDate(date, mode, locale)
 
     setPuzzleOptimal(null)
+    setApiPuzzle(null)
     fullSolutionRef.current = null
-    loadPuzzleOptimal(date, getApiModeKey(mode, locale))
+    loadPuzzleOptimal(date, mode, locale)
       .then((opt) => {
         if (opt && opt.optimal_score > 0) {
           setPuzzleOptimal({ score: opt.optimal_score, words: opt.optimal_words })

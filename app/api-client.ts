@@ -324,12 +324,35 @@ export function storeArrivedFromRef() {
   }
 }
 
-export async function loadPuzzleOptimal(date: string, mode: string): Promise<{ optimal_score: number; optimal_words: string[] } | null> {
+export async function loadPuzzleOptimal(date: string, mode: string, locale: string = "en"): Promise<{ optimal_score: number; optimal_words: string[] } | null> {
   try {
-    const res = await authFetch(`/api/puzzles/${date}?mode=${mode}`)
+    const res = await authFetch(`/api/puzzles/${date}?mode=${mode}&locale=${locale}`)
     if (!res.ok) return null
     const data = await res.json()
     return { optimal_score: data.optimal_score, optimal_words: data.optimal_words }
+  } catch {
+    return null
+  }
+}
+
+export type APIPuzzle = {
+  date: string
+  mode: string
+  locale: string
+  board_size: number
+  rack: string[]
+  filled_cells: { row: number; col: number; letter: string }[]
+  bonus_cells: { row: number; col: number; type: string }[]
+  optimal_score: number
+  optimal_words: string[]
+  difficulty_score: number | null
+}
+
+export async function loadPuzzleFromAPI(date: string, mode: string, locale: string = "en"): Promise<APIPuzzle | null> {
+  try {
+    const res = await authFetch(`/api/puzzles/${date}?mode=${mode}&locale=${locale}`)
+    if (!res.ok) return null
+    return await res.json()
   } catch {
     return null
   }
