@@ -16,6 +16,7 @@
  */
 
 import { randomInt } from "crypto"
+import { execSync } from "child_process"
 import { createRequire } from "module"
 import type { DailyPuzzle } from "../../app/puzzles"
 import type { LocaleCode } from "../../app/locales"
@@ -281,15 +282,13 @@ async function checkPuzzleExists(
   locale: string
 ): Promise<boolean> {
   try {
-    const res = await fetch(
-      `${API_BASE}/api/puzzles/${date}?mode=${mode}&locale=${locale}`,
-      {
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-        },
-      }
-    )
-    return res.ok
+    const result = execSync(
+      `curl -s -o /dev/null -w "%{http_code}" ` +
+      `"${API_BASE}/api/puzzles/${date}?mode=${mode}&locale=${locale}" ` +
+      `-H "x-admin-key: ${ADMIN_KEY}"`,
+      { timeout: 10000 }
+    ).toString().trim()
+    return result === "200"
   } catch {
     return false
   }
@@ -319,18 +318,20 @@ async function postPuzzle(
   }
 
   try {
-    const res = await fetch(`${API_BASE}/api/puzzles`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-key": ADMIN_KEY,
-      },
-      body: JSON.stringify(payload),
-    })
+    const payloadJson = JSON.stringify(payload)
+    const result = execSync(
+      `curl -s -w "\\n%{http_code}" -X POST "${API_BASE}/api/puzzles" ` +
+      `-H "Content-Type: application/json" ` +
+      `-H "x-admin-key: ${ADMIN_KEY}" ` +
+      `-d @-`,
+      { input: payloadJson, timeout: 30000 }
+    ).toString()
 
-    if (!res.ok) {
-      const err = await res.text()
-      console.error(`  POST failed: ${err}`)
+    const lines = result.trim().split("\n")
+    const statusCode = parseInt(lines[lines.length - 1], 10)
+
+    if (statusCode < 200 || statusCode >= 300) {
+      console.error(`  POST failed (${statusCode}): ${lines.slice(0, -1).join("\n")}`)
       return false
     }
 
@@ -338,7 +339,6 @@ async function postPuzzle(
   } catch (err) {
     const e = err as Error
     console.error(`  POST error: ${e.message}`)
-    if (e.cause) console.error(`  Cause: ${JSON.stringify(e.cause, null, 2)}`)
     return false
   }
 }
