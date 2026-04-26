@@ -336,7 +336,9 @@ async function postPuzzle(
 
     return true
   } catch (err) {
-    console.error(`  POST error: ${(err as Error).message}`)
+    const e = err as Error
+    console.error(`  POST error: ${e.message}`)
+    if (e.cause) console.error(`  Cause: ${JSON.stringify(e.cause, null, 2)}`)
     return false
   }
 }
