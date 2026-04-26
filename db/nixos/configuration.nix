@@ -184,7 +184,7 @@
     after = [ "postgresql.service" "network-online.target" "lexicon-api.service" ];
     requires = [ "network-online.target" ];
     wants = [ "lexicon-api.service" ];
-    path = [ pkgs.nodejs_20 ];
+    path = [ pkgs.nodejs_20 pkgs.bash pkgs.coreutils ];
     environment = {
       NODE_ENV = "production";
       API_BASE = "http://localhost:3100";
